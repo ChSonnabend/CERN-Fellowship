@@ -1,0 +1,8 @@
+Compilation:
+
+- Compile with only CPU support: ALIBUILD_O2_FORCE_GPU=disable aliBuild...
+
+
+Tracking:
+
+- Cluster errors are defined here: getClusterErrors2(...) in O2/GPU/GPUTracking/DataCompression/GPUTPCCompressionTrackModel.cxx
