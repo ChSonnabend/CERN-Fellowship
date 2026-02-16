@@ -7,6 +7,7 @@ import socket
 import os
 import functools
 import operator
+import importlib.util
 
 def readSim(path, find_key=None):
 
@@ -297,3 +298,13 @@ def machinePaths():
         return configs["epn"]
     else:
         print("Hostname not in options, hostname = " + str(hostname))
+        
+def load_attr_from_file(filepath, attr_name):
+    spec = importlib.util.spec_from_file_location("dynamic_module", filepath)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return getattr(module, attr_name)
+
+    # Example usage:
+    # load_config_fn = load_function_from_file(load_config, "load_config")
+    # cfg = load_config_fn()

@@ -1,4 +1,5 @@
 import time
+import copy
 import numpy as np
 
 import torch
@@ -292,8 +293,6 @@ class NN:
         if self.multigpu:
             healthy = self.detect_healthy_gpus()
             self.rank, self.worldsize = self.multigpu_training_setup()
-        if self.verbose:
-            print_dict(self.settings, name="Network settings")
 
     def __call__(self, X):
         return self.network(X)
@@ -304,6 +303,14 @@ class NN:
         else:
             model = self.network
         return model(X)
+    
+    def __default_weight_init__(self, weight_init=None):
+        if weight_init is not None:
+            for layer in self.network.modules():
+                if hasattr(layer, 'weight'):
+                    weight_init(layer.weight)
+                    if layer.bias is not None:
+                        nn.init.constant_(layer.bias, 0.1)
 
     def __weight_init__(self):
         try:
@@ -318,13 +325,17 @@ class NN:
                     print("Weight initialization successful with method:", self.settings["GLOBAL"]["weight_init"])
             except Exception as e2:
                 print("Weight initialization failed with error:", e2)
-                print("Continuing without weight initialization...")
+                print("Initializing weights according to own rule: {}".format(self.settings["GLOBAL"]["weight_init"]))
+                self.__default_weight_init__(weight_init=self.settings["GLOBAL"]["weight_init"])
+                # print("Continuing without weight initialization...")
 
     def training(self, data, settings={}):
 
         ### data = [DataLoader(training set), DataLoader(validation set), DataLoader(test set)]
 
         self.settings = deep_update(self.settings, settings, name="Network settings")
+        if self.verbose:
+            print_dict(self.settings, name="Training settings")
 
         ### Setting the device on which to run and data-type ###
         self.dtype = self.settings["MACHINE_OPTIONS"]["dtype"]
@@ -516,9 +527,6 @@ class NN:
 
                 tr_loss += loss
 
-                if self.multigpu:
-                    dist.barrier()
-
                 # if self.settings["OTHER"]["verbose"]:
                 #     av_tr_loss += loss.item()
                 #     if counter % 1000 == 999:
@@ -527,8 +535,8 @@ class NN:
 
                 ### Free memory
                 del BX, BY
-                if self.device == "cuda":
-                    torch.cuda.empty_cache()
+                # if self.device == "cuda":
+                #     torch.cuda.empty_cache()
                 # elif self.device == "mps":
                 #     torch.backends.mps.empty_cache()
 
@@ -536,6 +544,9 @@ class NN:
                 # torch.cuda.memory_reserved()
             # ----------------------------
 
+            if self.multigpu:
+                dist.barrier()
+    
             ### Iterating through the validation data ###
             val_loss = 0
             for counter, entry_val in enumerate(validation_dataloader, 0):
@@ -571,22 +582,23 @@ class NN:
                     os.makedirs("./networks_epoch")
 
                 # Create some esample data for ONNX
-                example_data = data.datasetTS[0][0]
+                bx, by = next(iter(train_dataloader))
+                example_data = bx[:1024].to(device="cpu", dtype=torch.float32)
 
                 # Save model at given epochs
                 if type(self.settings["OTHER"]["save_at_epochs"]) in [list, np.ndarray]:
                     if epoch in self.settings["OTHER"]["save_at_epochs"]:
                         print("\n--- Saving intermediate network ---")
                         # self.save_net("./networks_epoch/net_" + str(epoch) + ".pt", avoid_q=True)
-                        self.save_jit_script(path="./networks_epoch/net_jit_" + str(epoch) + ".pt")
-                        # self.save_onnx(example_data, "./networks_epoch/net_" + str(epoch) + ".onnx")
+                        # self.save_jit_script(path="./networks_epoch/net_jit_" + str(epoch) + ".pt")
+                        self.save_onnx(example_data, "./networks_epoch/net_" + str(epoch) + ".onnx")
                         # self.check_onnx("./networks_epoch/net_" + str(epoch) + ".onnx")
                         print("--- Intermediate network saved ---\n")
                 elif self.settings["OTHER"]["save_at_epochs"] in ["all", -1]:
                     print("\n--- Saving intermediate network ---")
                     # self.save_net("./networks_epoch/net_" + str(epoch) + ".pt", avoid_q=True)
-                    self.save_jit_script(path="./networks_epoch/net_jit_" + str(epoch) + ".pt")
-                    # self.save_onnx(example_data, "./networks_epoch/net_" + str(epoch) + ".onnx")
+                    # self.save_jit_script(path="./networks_epoch/net_jit_" + str(epoch) + ".pt")
+                    self.save_onnx(example_data, "./networks_epoch/net_" + str(epoch) + ".onnx")
                     # self.check_onnx("./networks_epoch/net_" + str(epoch) + ".onnx")
                     print("--- Intermediate network saved ---\n")
 
@@ -826,25 +838,26 @@ class NN:
             if not avoid_q:
                 if os.path.isfile(path):
                     response = input("File exists. Do you want to overwrite it? [y/n] ")
-                    if response == ("y" or "yes" or "Y" or "Yes" or "YES"):
+                    if response in ["y", "yes", "Y", "Yes", "YES"]:
                         # torch.save(self.network.state_dict(), path)
-                        torch.save(model.to(device="cpu", dtype=self.dtype), path)
+                        torch.save(model.state_dict(), path)
                         print("Network saved")
                     else:
                         print("Network not saved!")
 
                 else:
                     # torch.save(self.network.state_dict(), path)
-                    torch.save(model.to(device="cpu", dtype=self.dtype), path)
+                    torch.save(model.state_dict(), path)
                     print("Network saved")
 
             else:
-                torch.save(model.to(device="cpu", dtype=self.dtype), path)
+                torch.save(model.state_dict(), path)
                 print("Network saved")
 
             if self.settings["GLOBAL"]["quantization"]:
+                model = self.network.module if isinstance(self.network, DDP) else self.network
                 quantized_model = torch.ao.quantization.quantize_dynamic(
-                    self.network.cpu(),
+                    model.cpu(),
                     {torch.nn.Linear, torch.nn.Conv2d, torch.nn.Conv3d},  # a set of layers to dynamically quantize
                     **self.settings["QUANTIZATION_OPTIONS"]["PYTORCH"]
                 )
@@ -865,43 +878,61 @@ class NN:
         example_data=torch.tensor([[]], requires_grad=True),
         path="./net_onnx.onnx"
     ):
-        if self.rank == 0:
-            if isinstance(self.network, torch.nn.parallel.DistributedDataParallel):
-                model = self.network.module
-            else:
-                model = self.network
+        if self.multigpu:
+            dist.barrier()
 
-            model = model.to("cpu", dtype=torch.float32)
+        if self.rank == 0:
+            # 1) unwrap DDP
+            base_model = self.network.module if isinstance(self.network, DDP) else self.network
+
+            # 2) make an explicit copy (so we don't mutate training model)
+            model_copy = copy.deepcopy(base_model)
+
+            # 3) export copy in a clean state
+            model_copy.eval()
+            model_copy.to(device="cpu", dtype=torch.float32)
+
             example_data = example_data.to(device="cpu", dtype=torch.float32)
 
-            torch.onnx.export(
-                model,  # model being run
-                example_data,  # model input (or a tuple for multiple inputs)
-                path,  # where to save the model (can be a file or file-like object)
-                **self.settings["ONNX"]
-            )
+            with torch.no_grad():
+                torch.onnx.export(
+                    model_copy,
+                    example_data,
+                    path,
+                    **self.settings["ONNX"]
+                )
+
+            # optional: free RAM
+            del model_copy
 
             if self.settings["GLOBAL"]["amp"]:
                 model = onnx.load(path)
-                # if self.device!="cpu":
-                #     print("GPU found! Converting to mixed precision...")
-                #     model_fp16 = auto_mixed_precision.auto_convert_mixed_precision(model, {"input": example_data.cpu().detach().numpy()}, rtol=0.01, atol=0.001, keep_io_types=True)
-                # else:
-                #     print("Mixed precision model not supported for CPU-only device! Converting by casting...")
-                #     model_fp16 = float16.convert_float_to_float16(model, min_positive_val=1e-7, max_finite_val=1e4, keep_io_types=False, disable_shape_infer=False, op_block_list=None, node_block_list=None)
-                model_fp16 = float16.convert_float_to_float16(model, min_positive_val=1e-7, max_finite_val=1e4, keep_io_types=False, disable_shape_infer=False, op_block_list=None, node_block_list=None)
-                onnx.save(model_fp16, path.split(".")[0] + "_fp16.onnx")
-                # self.remove_cast_layer(path.split(".")[0] + "_fp32_fp16.onnx", path.split(".")[0] + "_fp16_fp16.onnx")
+                model_fp16 = float16.convert_float_to_float16(
+                    model,
+                    min_positive_val=1e-7,
+                    max_finite_val=1e4,
+                    keep_io_types=False,
+                    disable_shape_infer=False,
+                    op_block_list=None,
+                    node_block_list=None,
+                )
+                onnx.save(model_fp16, path.split(".onnx")[0] + "_fp16.onnx")
 
             if self.settings["GLOBAL"]["quantization"]:
                 quantize_dynamic(
                     path,
-                    path.split(".onnx")[0] + "_quantized_" + str(self.settings["QUANTIZATION_OPTIONS"]["ONNX"]["weight_type"]).lower() + ".onnx",
+                    path.split(".onnx")[0] + "_quantized_" +
+                    str(self.settings["QUANTIZATION_OPTIONS"]["ONNX"]["weight_type"]).lower() + ".onnx",
                     **self.settings["QUANTIZATION_OPTIONS"]["ONNX"]
                 )
                 print("Quantized ONNX model saved.")
 
+        if self.multigpu:
+            dist.barrier()
+
     def check_onnx(self, path="./net_onnx.onnx"):
+        if self.multigpu:
+            dist.barrier()
         if self.rank == 0:
             try:
                 onnx_model = onnx.load(path)
@@ -910,6 +941,8 @@ class NN:
             except Exception as e:
                 print("Failure in ONNX checker!")
                 print(e)
+        if self.multigpu:
+            dist.barrier()
 
     def remove_cast_layer(onnx_fp16_path, onnx_fp16_fixed_path):
         """Removes the Cast layer at the beginning and updates all connected nodes."""
