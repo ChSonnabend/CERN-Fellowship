@@ -1,0 +1,42 @@
+{
+
+    "directory_settings": {
+        "NN_dir": "/scratch/csonnabe/cern-fellowship/classes",
+        "rocm_container": "/lustre/alice/users/csonnab/TPC/TPC_PRODUCTION/Containers/rocm_torch_env.sif",
+        "cuda_container": "/lustre/alice/users/csonnab/TPC/TPC_PRODUCTION/Containers/cuda_torch_env.sif",
+        "O2_TABLES": "/scratch/csonnabe/cern-fellowship/run/jobs/clusterization/NN/src/O2_TABLES/TPC"
+    },
+
+    "exec_settings": {
+        "training_dir": "/scratch/csonnabe/cern-fellowship/run/jobs/clusterization/NN",
+        "output_folder": "/scratch/csonnabe/cern-fellowship/run/jobs/clusterization/NN/output/17022026_clusterErrorParameterization_removePos",
+        "enable_qa": 1
+    },
+
+    "suite_submission": {
+        "suite_submission": 1,
+        "configurations_dir": "/scratch/csonnabe/cern-fellowship/run/jobs/clusterization/NN/configurations/clusterErrorTraining"
+    },
+
+    "network_settings": {
+        "configurations_file": "/scratch/csonnabe/cern-fellowship/run/jobs/clusterization/NN/configurations/clusterErrorTraining/configs/configurations.py",
+        "training_file": "/scratch/csonnabe/cern-fellowship/run/jobs/clusterization/NN/src/training/train_base.py",
+        "save_as_pt": "False",
+        "save_as_onnx": "True",
+        "save_loss_in_files": "True"
+    },
+
+    "job_settings": {
+        "name": "NN_CLUS",
+        "partition": "prod",
+        "time": 480,
+        "device": "EPN",
+        "kernelsPerJob": 10,
+        "memory": "500G",
+        "notify": "END,FAIL,INVALID_DEPEND",
+        "email": "",
+        "optional_args": "--exclusive",
+        "ngpus": 8
+    }
+
+}

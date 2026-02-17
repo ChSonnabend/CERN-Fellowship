@@ -1,0 +1,16 @@
+{
+	"common": {
+		"training-data": {
+			"08022026_clusterErrorParameterization": "/scratch/csonnabe/PhD/jobs/clusterization/NN/data/output/08022026_clusterErrorParameterization"
+		}
+	},
+    "network-submission": {
+        "/scratch/csonnabe/cern-fellowship/run/jobs/clusterization/NN/configurations/clusterErrorTraining/configs/configurations.py": {
+			"submit": 1,
+			"output_folder": "clusterError",
+			"replace": {
+				"data_path": "latest_clusters.csv"
+			}
+		}
+    }
+}

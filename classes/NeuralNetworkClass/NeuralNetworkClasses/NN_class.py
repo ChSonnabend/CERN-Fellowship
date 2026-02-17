@@ -1,6 +1,7 @@
 import time
 import copy
 import numpy as np
+import functools
 
 import torch
 import torch.onnx
@@ -18,7 +19,6 @@ from onnxconverter_common import float16
 from onnxconverter_common import auto_mixed_precision
 
 from NeuralNetworkClass.NeuralNetworkClasses.utils.functions import deep_update, print_dict
-
 from  NeuralNetworkClass.NeuralNetworkClasses.utils.custom_loss_functions import *
 
 from  NeuralNetworkClass.NeuralNetworkClasses.modules.linear import fc_layer
@@ -37,6 +37,8 @@ import os
 import timeit
 import socket
 import onnx
+
+print_flush = functools.partial(print, flush=True)
 
 
 ### This layer dictionary will be used to assign the
@@ -122,7 +124,7 @@ class General_NN(nn.Module):
 
         self.layers = nn.ModuleList()
 
-        print("\nThis is the network structure:\n")
+        print_flush("\nThis is the network structure:\n")
 
         for i in range(len(self.params)):
             self.layers.append(
@@ -177,7 +179,7 @@ class General_NN(nn.Module):
 
             else:
 
-                print(
+                print_flush(
                     "Data was neither numpy.ndarray nor torch.Tensor... Evaluating by conversion..."
                 )
 
@@ -195,7 +197,7 @@ class General_NN(nn.Module):
 
         else:
 
-            print("Network must be in mode (eval) or (train). Please specify!")
+            print_flush("Network must be in mode (eval) or (train). Please specify!")
             output = False
 
         return output
@@ -286,7 +288,7 @@ class NN:
         self.rank = 0
         self.worldsize = 1
         self.multigpu = self.settings["MACHINE_OPTIONS"]["multigpu"]
-        self.verbose = self.settings["MACHINE_OPTIONS"]["verbose"] and (int(os.environ["SLURM_PROCID"]) == 0)
+        self.verbose = self.settings["MACHINE_OPTIONS"]["verbose"] and (int(os.environ.get("SLURM_PROCID", 0)) == 0)
 
         if self.settings["GLOBAL"]["weight_init"] is not None:
             self.__weight_init__() ### Needs to be done before the DDP wrapping
@@ -304,7 +306,7 @@ class NN:
             model = self.network
         return model(X)
     
-    def __default_weight_init__(self, weight_init=None):
+    def __default_weight_init__(self, weight_init=nn.init.normal_):
         if weight_init is not None:
             for layer in self.network.modules():
                 if hasattr(layer, 'weight'):
@@ -316,18 +318,18 @@ class NN:
         try:
             self.network.__weight_init__(weight_init=self.settings["GLOBAL"]["weight_init"])
             if self.verbose:
-                print("Weight initialization successful with method:", self.settings["GLOBAL"]["weight_init"])
+                print_flush("Weight initialization successful with method:", self.settings["GLOBAL"]["weight_init"])
         except Exception as e1:
-            print("Weight initialization failed with error:", e1)
+            print_flush("Weight initialization failed with error:", e1)
             try:
                 self.network.weight_init(weight_init=self.settings["GLOBAL"]["weight_init"])
                 if self.settings["OTHER"]["verbose"]:
-                    print("Weight initialization successful with method:", self.settings["GLOBAL"]["weight_init"])
+                    print_flush("Weight initialization successful with method:", self.settings["GLOBAL"]["weight_init"])
             except Exception as e2:
-                print("Weight initialization failed with error:", e2)
-                print("Initializing weights according to own rule: {}".format(self.settings["GLOBAL"]["weight_init"]))
-                self.__default_weight_init__(weight_init=self.settings["GLOBAL"]["weight_init"])
-                # print("Continuing without weight initialization...")
+                print_flush("Weight initialization failed with error:", e2)
+                print_flush("Initializing weights according to own rule: {}".format(nn.init.normal_))
+                self.__default_weight_init__(weight_init=nn.init.normal_)
+                # print_flush("Continuing without weight initialization...")
 
     def training(self, data, settings={}):
 
@@ -358,14 +360,14 @@ class NN:
 
             self.network.to(device=self.device, dtype=self.dtype)
 
-        ### Printing device information
+        ### print_flushing device information
         if self.multigpu:
             if self.verbose and self.rank == 0:
-                print("[Multi-GPU training]", self.worldsize, "participating GPUs.")
+                print_flush("[Multi-GPU training]", self.worldsize, "participating GPUs.")
                 for i in range(self.worldsize):
                     dev_id = torch.cuda.device_count()
                     dev_name = torch.cuda.get_device_name(i)
-                    print("Device ID: ", i, ", Device name: ", dev_name)
+                    print_flush("Device ID: ", i, ", Device name: ", dev_name)
         else:
             if ("cuda" in self.device):
                 dev_id = torch.cuda.current_device()  # returns you the ID of your current device
@@ -374,17 +376,17 @@ class NN:
                 # dev_mem_man = torch.cuda.memory_reserved(dev_name)         #returns you the current GPU memory managed by caching allocator in bytes for a given device
                 torch.cuda.empty_cache()  # clear variables in cache that are unused
                 if self.verbose:
-                    print("\nRunning on GPU")
-                    print("Device ID: ", dev_id, ", Device name: ", dev_name, "\n")
+                    print_flush("\nRunning on GPU")
+                    print_flush("Device ID: ", dev_id, ", Device name: ", dev_name, "\n")
             elif self.device == "mps":
                 if self.verbose:
-                    print("\nRunning on MPS\n")
+                    print_flush("\nRunning on MPS\n")
             else:
                 if self.settings["MACHINE_OPTIONS"]["cpu_threads"] is not None:
                     torch.set_num_threads(int(self.settings["MACHINE_OPTIONS"]["cpu_threads"]))
                 if self.verbose:
-                    print("\nRunning on CPU")
-                    print("{} CPU threads\n".format(torch.get_num_threads()))
+                    print_flush("\nRunning on CPU")
+                    print_flush("{} CPU threads\n".format(torch.get_num_threads()))
 
         ### Setting some variables of the network ###
 
@@ -400,7 +402,7 @@ class NN:
         self.len_VS = len(data.datasetVS)
 
         if not data.loadTS or not data.loadVS:
-            print("The data has not been loaded. Shutting down.")
+            print_flush("The data has not been loaded. Shutting down.")
             exit()
 
         if data.transform_data:
@@ -422,7 +424,7 @@ class NN:
 
 
         if self.verbose:
-            print("\n============ Neural Network training ============\n")
+            print_flush("\n============ Neural Network training ============\n")
 
         ### Tensorboard profiler (https://pytorch.org/tutorials/intermediate/tensorboard_profiler_tutorial.html)
         #if self.settings["GLOBAL"]["profiler"]:
@@ -458,7 +460,7 @@ class NN:
             if epoch in self.settings["DATA_OPTIONS"]["batchsize_schedule"]:
                 idx_tr = self.settings["DATA_OPTIONS"]["batchsize_schedule"].index(epoch)
                 if self.verbose:
-                    print("--- Batch size:", self.batchsizes[idx_tr], "---")
+                    print_flush("--- Batch size:", self.batchsizes[idx_tr], "---")
 
             ### Iterating through the training data ###
 
@@ -530,7 +532,7 @@ class NN:
                 # if self.settings["OTHER"]["verbose"]:
                 #     av_tr_loss += loss.item()
                 #     if counter % 1000 == 999:
-                #         print("{val1} minibatches. Average training loss: {val2}".format(val1=counter+1, val2 = np.round(av_tr_loss/1000.,6)))
+                #         print_flush("{val1} minibatches. Average training loss: {val2}".format(val1=counter+1, val2 = np.round(av_tr_loss/1000.,6)))
                 #         av_tr_loss = 0
 
                 ### Free memory
@@ -557,7 +559,7 @@ class NN:
                 del val_obs, val_label
 
             #    if verbose and counter % 1000 == 999:
-            #        print("Gone through {} samples in validation set".format(counter+1))
+            #        print_flush("Gone through {} samples in validation set".format(counter+1))
 
             # ----------------------------
 
@@ -588,28 +590,28 @@ class NN:
                 # Save model at given epochs
                 if type(self.settings["OTHER"]["save_at_epochs"]) in [list, np.ndarray]:
                     if epoch in self.settings["OTHER"]["save_at_epochs"]:
-                        print("\n--- Saving intermediate network ---")
+                        print_flush("\n--- Saving intermediate network ---")
                         # self.save_net("./networks_epoch/net_" + str(epoch) + ".pt", avoid_q=True)
                         # self.save_jit_script(path="./networks_epoch/net_jit_" + str(epoch) + ".pt")
                         self.save_onnx(example_data, "./networks_epoch/net_" + str(epoch) + ".onnx")
                         # self.check_onnx("./networks_epoch/net_" + str(epoch) + ".onnx")
-                        print("--- Intermediate network saved ---\n")
+                        print_flush("--- Intermediate network saved ---\n")
                 elif self.settings["OTHER"]["save_at_epochs"] in ["all", -1]:
-                    print("\n--- Saving intermediate network ---")
+                    print_flush("\n--- Saving intermediate network ---")
                     # self.save_net("./networks_epoch/net_" + str(epoch) + ".pt", avoid_q=True)
                     # self.save_jit_script(path="./networks_epoch/net_jit_" + str(epoch) + ".pt")
                     self.save_onnx(example_data, "./networks_epoch/net_" + str(epoch) + ".onnx")
                     # self.check_onnx("./networks_epoch/net_" + str(epoch) + ".onnx")
-                    print("--- Intermediate network saved ---\n")
+                    print_flush("--- Intermediate network saved ---\n")
 
                 # Putting network back on the device and dtype that is needed in training
                 self.network.to(device=self.device, dtype=self.dtype)
 
 
-            ### Printing the stats ###
+            ### print_flushing the stats ###
 
             if self.verbose:
-                print(
+                print_flush(
                     "Epoch ",
                     epoch + 1,
                     "/",
@@ -627,9 +629,9 @@ class NN:
 
             # ----------------------------
 
-        # print(list(self.network.parameters()))
+        # print_flush(list(self.network.parameters()))
         if self.verbose:
-            print("\nTraining finished!\n")
+            print_flush("\nTraining finished!\n")
 
         # if self.settings["GLOBAL"]["profiler"]:
         #     prof.stop()
@@ -684,20 +686,20 @@ class NN:
         # ----------------------------------------------------------------------
         # 1. Read Slurm variables
         # ----------------------------------------------------------------------
-        slurm_procid   = int(os.environ["SLURM_PROCID"])    # global rank
-        slurm_localid  = int(os.environ["SLURM_LOCALID"])   # local rank on this node
-        slurm_ntasks   = int(os.environ["SLURM_NTASKS"])    # total tasks (world size)
-        slurm_nodeid   = int(os.environ["SLURM_NODEID"])    # node index (0 .. nnodes-1)
-        slurm_nnodes   = int(os.environ["SLURM_NNODES"])    # number of nodes
-        slurm_jobid    = int(os.environ["SLURM_JOBID"])
-        user           = os.environ["USER"]
+        slurm_procid   = int(os.environ.get("SLURM_PROCID", 0))    # global rank
+        slurm_localid  = int(os.environ.get("SLURM_LOCALID", 0))   # local rank on this node
+        slurm_ntasks   = int(os.environ.get("SLURM_NTASKS", 1))    # total tasks (world size)
+        slurm_nodeid   = int(os.environ.get("SLURM_NODEID", 0))    # node index (0 .. nnodes-1)
+        slurm_nnodes   = int(os.environ.get("SLURM_NNODES", 1))    # number of nodes
+        slurm_jobid    = int(os.environ.get("SLURM_JOBID", 0))
+        user           = os.environ.get("USER", "unknown")
 
-        visible_devices = os.environ["CUDA_VISIBLE_DEVICES"].split(",")
+        visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")
         if slurm_ntasks > len(visible_devices):
             raise RuntimeError(
                 f"Slurm assigned {slurm_ntasks} ranks but only {len(visible_devices)} GPUs are healthy."
             )
-        local_rank = int(os.environ["SLURM_LOCALID"])
+        local_rank = int(os.environ.get("SLURM_LOCALID", 0))
 
         # Let user-provided n_gpus override Slurm if desired
         worldsize = min(len(visible_devices), slurm_ntasks)
@@ -784,7 +786,7 @@ class NN:
             torch.cuda.synchronize(gpu_id)
             return True
         except Exception as e:
-            print(f"[GPU {gpu_id}] FAILED: {e}")
+            print_flush(f"[GPU {gpu_id}] FAILED: {e}")
             return False
 
 
@@ -793,10 +795,10 @@ class NN:
         count = torch.cuda.device_count()
 
         if slurm_procid == -1:
-            print("Warning: SLURM_PROCID not set. Assuming single-process execution.")
+            print_flush("Warning: SLURM_PROCID not set. Assuming single-process execution.")
             slurm_procid = 0
             healthy = list(range(count))
-            print("Healthy GPUs:", healthy)
+            print_flush("Healthy GPUs:", healthy)
             return healthy
         
         else:
@@ -807,7 +809,7 @@ class NN:
                     healthy.append(gpu)
 
             if slurm_procid == 0:
-                print("Healthy GPUs:", healthy)
+                print_flush("Healthy GPUs:", healthy)
 
             if not healthy:
                 raise RuntimeError("No healthy GPUs available.")
@@ -821,7 +823,7 @@ class NN:
         if self.rank == 0:
             np.savetxt(path[0], self.training_loss)
             np.savetxt(path[1], self.validation_loss)
-            print("Training and validation loss saved!")
+            print_flush("Training and validation loss saved!")
 
     def eval(self):
         self.network.mode = "eval"
@@ -841,18 +843,18 @@ class NN:
                     if response in ["y", "yes", "Y", "Yes", "YES"]:
                         # torch.save(self.network.state_dict(), path)
                         torch.save(model.state_dict(), path)
-                        print("Network saved")
+                        print_flush("Network saved")
                     else:
-                        print("Network not saved!")
+                        print_flush("Network not saved!")
 
                 else:
                     # torch.save(self.network.state_dict(), path)
                     torch.save(model.state_dict(), path)
-                    print("Network saved")
+                    print_flush("Network saved")
 
             else:
                 torch.save(model.state_dict(), path)
-                print("Network saved")
+                print_flush("Network saved")
 
             if self.settings["GLOBAL"]["quantization"]:
                 model = self.network.module if isinstance(self.network, DDP) else self.network
@@ -862,7 +864,7 @@ class NN:
                     **self.settings["QUANTIZATION_OPTIONS"]["PYTORCH"]
                 )
                 torch.save(quantized_model, path.split(".pt")[0] + "_quantized_" + str(self.settings["QUANTIZATION_OPTIONS"]["PYTORCH"]["dtype"]).split(".")[-1].lower() + ".pt")
-                print("Quantized PyTorch model saved.\n")
+                print_flush("Quantized PyTorch model saved.\n")
 
     def jit_script_model(self):
         self.jit_scripted_model = torch.jit.script(self.network.cpu())
@@ -871,7 +873,7 @@ class NN:
     def save_jit_script(self, path="./net_jit_script.pt"):
         if self.rank == 0:
             torch.jit.save(self.jit_script_model(), path)
-            print("Model saved!")
+            print_flush("Model saved!")
 
     def save_onnx(
         self,
@@ -925,7 +927,7 @@ class NN:
                     str(self.settings["QUANTIZATION_OPTIONS"]["ONNX"]["weight_type"]).lower() + ".onnx",
                     **self.settings["QUANTIZATION_OPTIONS"]["ONNX"]
                 )
-                print("Quantized ONNX model saved.")
+                print_flush("Quantized ONNX model saved.")
 
         if self.multigpu:
             dist.barrier()
@@ -937,10 +939,10 @@ class NN:
             try:
                 onnx_model = onnx.load(path)
                 onnx.checker.check_model(onnx_model)
-                print("ONNX checker: Success!")
+                print_flush("ONNX checker: Success!")
             except Exception as e:
-                print("Failure in ONNX checker!")
-                print(e)
+                print_flush("Failure in ONNX checker!")
+                print_flush(e)
         if self.multigpu:
             dist.barrier()
 
@@ -958,7 +960,7 @@ class NN:
                 break
 
         if not cast_node:
-            print("No Cast layer found. Model is already using FP16 input.")
+            print_flush("No Cast layer found. Model is already using FP16 input.")
             return
 
         cast_output = cast_node.output[0]  # The output of the Cast node
@@ -984,4 +986,4 @@ class NN:
 
         # Save modified model
         onnx.save(model, onnx_fp16_fixed_path)
-        print(f"Saved modified model without Cast layer to {onnx_fp16_fixed_path}")
+        print_flush(f"Saved modified model without Cast layer to {onnx_fp16_fixed_path}")
