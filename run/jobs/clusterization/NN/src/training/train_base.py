@@ -1,10 +1,11 @@
-import sys, os, datetime, re, json, argparse
+import sys, os, re, json, argparse
 
 import pandas as pd
 import numpy as np
 import onnxruntime as ort
 import torch
 import torch.nn as nn
+from datetime import datetime
 
 from sklearn.model_selection import train_test_split
 
@@ -19,21 +20,22 @@ import configurations
 
 ### Command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument("-locdir", "--local-training-dir", default=".", help="Local directory for training of the neural network")
+parser.add_argument("-c", "--config", default="config.json", help="Local directory for training of the neural network")
 args = parser.parse_args()
 
 ########### Load the configurations from config.json ###########
 
-configs_file = open("config.json", "r")
+configs_file = open(args.config, "r")
 CONF = json.load(configs_file)
+configs_file.close()
+now = datetime.now()
+day = now.strftime("%d-%m-%Y")
 
-### directory settings
-NN_dir              = CONF["directory_settings"]["NN_dir"]
-O2_TABLES           = CONF["directory_settings"]["O2_TABLES"]
+for imp in CONF["directory_settings"]["classes"]:
+    sys.path.append(imp)
 
 ### execution settings
 training_dir        = CONF["exec_settings"]["training_dir"]
-output_folder       = CONF["exec_settings"]["output_folder"]
 enable_qa           = CONF["exec_settings"]["enable_qa"]
 
 ### network settings
@@ -41,12 +43,10 @@ save_as_pt          = CONF["network_settings"]["save_as_pt"]
 save_as_onnx        = CONF["network_settings"]["save_as_onnx"]
 save_loss_in_files  = CONF["network_settings"]["save_loss_in_files"]
 
-configs_file.close()
-
 ########### Print the date, time and location for identification ###########
 
-date = datetime.datetime.now().date()
-time = datetime.datetime.now().time()
+date = datetime.now().date()
+time = datetime.now().time()
 
 verbose = (int(os.environ.get("SLURM_PROCID", "0"))==0)
 
@@ -55,12 +55,10 @@ if verbose:
     print("SLURM job ID:", os.environ.get("SLURM_JOBID", "N/A"))
     print("Date (dd/mm/yyyy):",date.strftime('%02d/%02m/%04Y'))
     print("Time (hh/mm/ss):", time.strftime('%02H:%02M:%02S'))
-    print("Output-folder:", training_dir+"/"+output_folder+"/"+args.local_training_dir)
+    print("Output-folder:", args.config.split(".")[0])
 
 
 ########### Import the Neural Network class ###########
-
-sys.path.append(NN_dir)
 
 from GeneralPurposeClass.measure_memory_usage import print_memory_usage
 from NeuralNetworkClass.NeuralNetworkClasses.utils.dataset_loading import DataLoading
@@ -75,7 +73,7 @@ if ("cluster-errors" in configurations.mode):
     dataIn = data_full[configurations.labels_x]
     dataOut = data_full[configurations.labels_y]
     del data_full
-    
+
 else:
     def readFromPy(pathLabels, pathData):
         return np.loadtxt(pathLabels, dtype=str), np.load(pathData)
@@ -177,17 +175,17 @@ for step, trconf in enumerate(configurations.training_configs):
     ### Evaluate training and validation loss over epochs
     deep_update(dict_net, trconf)
     NeuralNet.training(data, settings=dict_net)
-    
+
     print("Finished training with loss function:", trconf["GLOBAL"]["loss_function"], "(step", step, ")")
 
 ### Save the network and the losses
 NeuralNet.eval()
 if save_as_pt == "True":
-    NeuralNet.save_net(path=args.local_training_dir+'/net.pt',avoid_q=True)
-    # NeuralNet.save_jit_script(path=args.local_training_dir+'/net_jit.pt')
+    NeuralNet.save_net(path='./network/net.pt',avoid_q=True)
+    # NeuralNet.save_jit_script(path='./network/net_jit.pt')
 if save_as_onnx == "True":
     NeuralNet.save_onnx(example_data=torch.tensor((save_onnx_example),requires_grad=True).float(),
-                        path=args.local_training_dir+'/net.onnx')
-    NeuralNet.check_onnx(path=args.local_training_dir+'/net.onnx')
+                        path='./network/net.onnx')
+    NeuralNet.check_onnx(path='./network/net.onnx')
 if save_loss_in_files == "True":
-    NeuralNet.save_losses(path=[args.local_training_dir+'/training_loss.txt',args.local_training_dir+'/validation_loss.txt'])
+    NeuralNet.save_losses(path=['./network/training_loss.txt','./network/validation_loss.txt'])

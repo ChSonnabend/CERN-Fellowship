@@ -32,9 +32,12 @@ args = parser.parse_args()
 
 configs_file = open("config.json", "r")
 CONF = json.load(configs_file)
+configs_file.close()
 
+for imp in CONF["directory_settings"]["classes"]:
+    sys.path.append(imp)
+    
 ### directory settings
-NN_dir              = CONF["directory_settings"]["NN_dir"]
 O2_TABLES           = CONF["directory_settings"]["O2_TABLES"]
 
 ### execution settings
@@ -46,8 +49,6 @@ enable_qa           = CONF["exec_settings"]["enable_qa"]
 save_as_pt          = CONF["network_settings"]["save_as_pt"]
 save_as_onnx        = CONF["network_settings"]["save_as_onnx"]
 save_loss_in_files  = CONF["network_settings"]["save_loss_in_files"]
-
-configs_file.close()
 
 ########### Print the date, time and location for identification ###########
 

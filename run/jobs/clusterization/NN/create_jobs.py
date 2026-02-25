@@ -1,7 +1,7 @@
 from sys import exit
 import os
 import json
-from datetime import date
+from datetime import datetime
 import glob
 
 import argparse
@@ -14,13 +14,12 @@ args = parser.parse_args()
 
 configs_file = open(args.config, "r")
 CONF = json.load(configs_file)
-
-### directory settings
-NN_dir              = CONF["directory_settings"]["NN_dir"]
+now = datetime.now()
+day = now.strftime("%d-%m-%Y")
 
 ### execution settings
 training_dir        = CONF["exec_settings"]["training_dir"]
-output_folder       = CONF["exec_settings"]["output_folder"]
+output_folder       = os.path.join(CONF["exec_settings"]["output_folder"], day)
 enable_qa           = CONF["exec_settings"]["enable_qa"]
 
 ### suite submission

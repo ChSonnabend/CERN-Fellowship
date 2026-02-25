@@ -13,8 +13,6 @@ configs_file = open("config.json", "r")
 CONF = json.load(configs_file)
 
 ### directory settings
-NN_dir          = CONF["directory_settings"]["NN_dir"]
-
 training_dir    = CONF["exec_settings"]["training_dir"]
 output_folder   = CONF["exec_settings"]["output_folder"]
 

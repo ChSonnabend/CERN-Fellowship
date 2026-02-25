@@ -6,249 +6,132 @@ from os import path
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", "--config", default="/lustre/alice/users/csonnab/PhD/jobs/clusterization/NN/config.json", help="JSON file with settings for data conversion jobs")
-parser.add_argument("-jbscript", "--job-script", default=".", help="Path to job script")
-parser.add_argument("-smdir", "--submission-dir", default=".", help="Path to output / submission directory where the file is written")
+parser.add_argument("-js", "--job-script", default=".", help="Path to job script")
+parser.add_argument("-jc", "--job-config", default = "{}", help="Job settings (dict) with which to update the default configs")
+parser.add_argument("-sd", "--submission-dir", default=".", help="Path to which the bash script gets written and from where it will be executed")
 args = parser.parse_args()
 
 configs_file = open(args.config, "r")
 CONF = json.load(configs_file)
+configs_file.close()
+
+for imp in CONF["directory_settings"]["classes"]:
+    sys.path.append(imp)
+from GeneralPurposeClass.deep_update_json import deep_update
 
 ### directory settings
 rocm_container  = CONF["directory_settings"]["rocm_container"]
 cuda_container  = CONF["directory_settings"]["cuda_container"]
-
-### network settings
+bash_path = path.join(args.submission_dir, "TRAIN.sh")
 
 ### job settings
-name            = CONF["job_settings"]["name"]
-partition       = CONF["job_settings"]["partition"]
-time            = CONF["job_settings"]["time"]
-device          = CONF["job_settings"]["device"]
-kernelsPerJob   = CONF["job_settings"]["kernelsPerJob"]
-memory          = CONF["job_settings"]["memory"]
-notify          = CONF["job_settings"]["notify"]
-email           = CONF["job_settings"]["email"]
+global_slurm_defaults = {
+    "name": "JOB",
+    "time": 60,
+    "chdir": args.submission_dir,
+    "notify": "END,FAIL,INVALID_DEPEND",
+    "email": "",
+    "special-args": {
+        "optional_args": "--exclusive"
+    }
+}
 
-configs_file.close()
+ext_job_config = json.loads(args.job_config)
+job_settings = deep_update(global_slurm_defaults, ext_job_config, verbose=False)
 
-job_dict = {'user': os.environ['USER'],
-'name': name,
-'time': time,
-'kJ': int(kernelsPerJob),
-'pj': args.submission_dir,
-'mem': memory,
-'part': partition,
-'cuda_container': cuda_container,
-'rocm_container': rocm_container,
-'job_script': str(args.job_script),
-'notify': notify,
-'email': email}
+slurm_replacements = {
+    "name": "job-name",
+    "kernelsPerJob": "cpus-per-task",
+    "memory": "mem",
+    "notify": "mail-type",
+    "email": "mail-user",
+    "folder": "chdir",
+}
 
-if "ngpus" in CONF["job_settings"].keys():
-    job_dict['ngpus'] = CONF["job_settings"]["ngpus"]
+# Replace invalid key names with actual slurm option names
+for k in list(job_settings):
+    if k in slurm_replacements:
+        job_settings[slurm_replacements[k]] = job_settings.pop(k)
 
-if "EPN" in device: ### Setup to submit to EPN nodes
+device = ext_job_config["special-args"].get("device", None)
+ngpus = ext_job_config["special-args"].get("ngpus", 1)
+local_slurm_defaults = {} #default
+interpreters = None
+extra_workflow = ""
 
-    bash_path = path.join(args.submission_dir, "TRAIN.sh")
-    script = """#!/bin/bash
-#SBATCH --job-name=%(name)s                                                 # Task name
-#SBATCH --chdir=%(pj)s                                                      # Working directory on shared storage
-#SBATCH --time=%(time)s                                                     # Run time limit
-#SBATCH --mem=%(mem)s                                                       # job memory
-#SBATCH --partition=%(part)s                                                # job partition (debug, main)
-#SBATCH --mail-type=%(notify)s                                              # notify via email
-#SBATCH --mail-user=%(email)s                                               # recipient
-""" % job_dict
+if device == "EPN": ### Setup to submit to EPN nodes
 
-    if "ngpus" in job_dict.keys() and int(job_dict['ngpus']) > 8:
-        job_dict['nodes'] = int(job_dict['ngpus']) // 8
-        job_dict['ntasks_per_node'] = 8
-        script += """#SBATCH --nodes=%(nodes)s                              # number of nodes
-#SBATCH --gres=gpu:8   		                                                # reservation for GPU
-#SBATCH --ntasks-per-node=%(ntasks_per_node)s                               # number of tasks, for MULTI-GPU training
+    local_slurm_defaults = {
+        "partition": "prod"
+    }
+    interpreters = {
+        "py": "/bin/python3.9"
+    }
 
-export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
+    if ngpus:
+        nodes = ngpus // 8
+        ntasks_per_node = 8 if ngpus > 8 else ngpus
 
-time srun /bin/python3.9 %(job_script)s --local-training-dir "$1"
-""" % job_dict
+        local_slurm_defaults["nodes"] = nodes
+        local_slurm_defaults["gres"] = "gpu:" + str(ntasks_per_node)
+        local_slurm_defaults["ntasks-per-node"] = ntasks_per_node
 
-    elif int(job_dict['ngpus']) > 1:
-        script += """#SBATCH --nodes=1                                      # number of nodes
-#SBATCH --gres=gpu:%(ngpus)s   		                                        # reservation for GPU
-#SBATCH --ntasks-per-node=%(ngpus)s                                         # number of tasks, for MULTI-GPU training
-
-export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
-
-time srun /bin/python3.9 %(job_script)s --local-training-dir "$1"
-
-""" % job_dict
-
-    else:
-        script += """#SBATCH --nodes=1                                      # number of nodes
-#SBATCH --gres=gpu:1   		                                                # reservation for GPU
-#SBATCH --ntasks-per-node=1                                                 # number of tasks, for MULTI-GPU training
-
-export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
-
-time /bin/python3.9 %(job_script)s --local-training-dir "$1"
-
-""" % job_dict
-
-    bash_file = open(bash_path, "w")
-    bash_file.write(script)
-    bash_file.close()
-
-elif "PRIV" in device:
-
-    bash_file = open(path.join(args.submission_dir, "TRAIN.sh"), "w")
-    bash_file.write(
-"""#!/bin/bash
-#SBATCH --job-name=%(name)s                                                 # Task name
-#SBATCH --chdir=%(pj)s                                                      # Working directory on shared storage
-#SBATCH --time=%(time)s                                                     # Run time limit
-#SBATCH --mem=%(mem)s                                                       # job memory
-#SBATCH --partition=cluster                                                 # job partition (debug, main)
-#SBATCH --mail-type=%(notify)s                                              # notify via email
-#SBATCH --mail-user=%(email)s                                               # recipient
-
-export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
-
-time python3 %(job_script)s --local-training-dir "$1"
-
-""" % job_dict
-
-    )
-    bash_file.close()
+        extra_workflow = "export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}"
 
 elif device == "MI100_GPU":
 
-    bash_path = path.join(args.submission_dir, "TRAIN.sh")
-    script = """#!/bin/bash
-#SBATCH --job-name=%(name)s                                                 # Task name
-#SBATCH --chdir=%(pj)s                                                      # Working directory on shared storage
-#SBATCH --time=%(time)s                                                     # Run time limit
-#SBATCH --mem=%(mem)s                                                       # job memory
-#SBATCH --partition=%(part)s                                                # job partition (debug, main)
-#SBATCH --mail-type=%(notify)s                                              # notify via email
-#SBATCH --mail-user=%(email)s                                               # recipient
-#SBATCH --constraint=mi100   		                                        # reservation for GPU
-""" % job_dict
+    local_slurm_defaults = {
+        "partition": "gpu",
+        "time": 480,
+        "constraint": "mi100"
+    }
+    interpreters = {
+        "py": "apptainer exec " + rocm_container
+    }
 
-    if "ngpus" in job_dict.keys() and int(job_dict['ngpus']) > 8:
-        job_dict['nodes'] = int(job_dict['ngpus']) // 8
-        job_dict['ntasks_per_node'] = 8
-        script += """#SBATCH --nodes=%(nodes)s                              # number of nodes
-#SBATCH --gres=gpu:8   		                                                # reservation for GPU
-#SBATCH --ntasks-per-node=%(ntasks_per_node)s                               # number of tasks, for MULTI-GPU training
+    if ngpus:
+        nodes = ngpus // 8
+        ntasks_per_node = 8 if ngpus > 8 else ngpus
 
-export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
+        local_slurm_defaults["nodes"] = nodes
+        local_slurm_defaults["gres"] = "gpu:" + str(ntasks_per_node)
+        local_slurm_defaults["ntasks-per-node"] = ntasks_per_node
 
-time srun singularity exec %(rocm_container)s python3 %(job_script)s --local-training-dir "$1"
-""" % job_dict
-
-    elif int(job_dict['ngpus']) > 1:
-        script += """#SBATCH --nodes=1                                      # number of nodes
-#SBATCH --gres=gpu:%(ngpus)s   		                                        # reservation for GPU
-#SBATCH --ntasks-per-node=%(ngpus)s                                         # number of tasks, for MULTI-GPU training
-
-export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
-
-time srun singularity exec %(rocm_container)s python3 %(job_script)s --local-training-dir "$1"
-
-""" % job_dict
-
-    else:
-        script += """#SBATCH --nodes=1                                      # number of nodes
-#SBATCH --gres=gpu:1   		                                                # reservation for GPU
-#SBATCH --ntasks-per-node=1                                                 # number of tasks, for MULTI-GPU training
-
-export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
-
-time singularity exec %(rocm_container)s python3 %(job_script)s --local-training-dir "$1"
-
-""" % job_dict
-
-    bash_file = open(bash_path, "w")
-    bash_file.write(script)
-    bash_file.close()
-
-elif device == "MI50_GPU":
-
-    bash_path = path.join(args.submission_dir, "TRAIN.sh")
-    script = """#!/bin/bash
-#SBATCH --job-name=%(name)s                                                 # Task name
-#SBATCH --chdir=%(pj)s                                                      # Working directory on shared storage
-#SBATCH --time=%(time)s                                                     # Run time limit
-#SBATCH --mem=%(mem)s                                                       # job memory
-#SBATCH --partition=%(part)s                                                # job partition (debug, main)
-#SBATCH --mail-type=%(notify)s                                              # notify via email
-#SBATCH --mail-user=%(email)s                                               # recipient
-#SBATCH --constraint=mi50   		                                        # reservation for GPU
-""" % job_dict
-
-    if "ngpus" in job_dict.keys() and int(job_dict['ngpus']) > 8:
-        job_dict['nodes'] = int(job_dict['ngpus']) // 8
-        job_dict['ntasks_per_node'] = 8
-        script += """#SBATCH --nodes=%(nodes)s                              # number of nodes
-#SBATCH --gres=gpu:8   		                                                # reservation for GPU
-#SBATCH --ntasks-per-node=%(ntasks_per_node)s                               # number of tasks, for MULTI-GPU training
-
-export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
-
-time srun singularity exec %(rocm_container)s python3 %(job_script)s --local-training-dir "$1"
-""" % job_dict
-
-    elif int(job_dict['ngpus']) > 1:
-        script += """#SBATCH --nodes=1                                      # number of nodes
-#SBATCH --gres=gpu:%(ngpus)s   		                                        # reservation for GPU
-#SBATCH --ntasks-per-node=%(ngpus)s                                         # number of tasks, for MULTI-GPU training
-
-export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
-
-time srun singularity exec %(rocm_container)s python3 %(job_script)s --local-training-dir "$1"
-
-""" % job_dict
-
-    else:
-        script += """#SBATCH --nodes=1                                      # number of nodes
-#SBATCH --gres=gpu:1   		                                                # reservation for GPU
-#SBATCH --ntasks-per-node=1                                                 # number of tasks, for MULTI-GPU training
-
-export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
-
-time singularity exec %(rocm_container)s python3 %(job_script)s --local-training-dir "$1"
-
-""" % job_dict
-
-    bash_file = open(bash_path, "w")
-    bash_file.write(script)
-    bash_file.close()
+        extra_workflow = "export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}"
 
 elif device == "CPU":
-
-    bash_file = open(path.join(args.submission_dir, "TRAIN.sh"), "w")
-    bash_file.write(
-"""#!/bin/bash
-
-#SBATCH --job-name=%(name)s                                                 # Task name
-#SBATCH --chdir=%(pj)s                                                      # Working directory on shared storage
-#SBATCH --time=%(time)s                                                     # Run time limit
-#SBATCH --mem=%(mem)s                                                       # job memory
-#SBATCH --cpus-per-task=%(kJ)s 	                                            # cpus per task
-#SBATCH --partition=%(part)s                                                # job partition (debug, main)
-#SBATCH --mail-type=%(notify)s                                              # notify via email
-#SBATCH --mail-user=%(email)s                                               # recipient
-
-export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
-
-time python3 %(job_script)s --local-training-dir "$1"
-
-""" % job_dict
-
-    )
-    bash_file.close()
+    local_slurm_defaults = {
+        "time": 480
+    }
+    interpreters = {
+        "py": "apptainer exec " + rocm_container
+    }
 
 else:
     print("Choose a given device (GPU or CPU)!")
     print("Stopping.")
     exit()
+
+
+### Dictionary creation
+
+job_settings = deep_update(job_settings, local_slurm_defaults, verbose=False)
+job_settings.pop("special-args", None)
+
+### Script creation
+
+def create_slurm_header(config_dict, workflow):
+    script = "#!/bin/bash\n"
+    for k, v in config_dict.items():
+        if v:
+            script += "#SBATCH --" + str(k) + "=" + str(v) + "\n"
+    script += "\n" + workflow
+    return script
+
+choose_interpreter = interpreters.get(args.job_script.split(".")[-1], "")
+workflow = extra_workflow + "\n" + "time srun " + choose_interpreter + " " + args.job_script + " --config " + args.config
+final_script = create_slurm_header(job_settings, workflow)
+
+bash_file = open(bash_path, "w")
+bash_file.write(final_script)
+bash_file.close()
