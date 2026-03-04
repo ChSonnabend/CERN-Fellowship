@@ -34,7 +34,7 @@ configs_file.close()
 
 #################################
 
-def check_path(path, overwrite=True):
+def check_path(path, overwrite=True, continue_if_n=False):
     return_value = False
     if os.path.exists(path):
         response = input("Jobs directory ({}) exists. Overwrite it? (y/n) ".format(path))
@@ -43,8 +43,9 @@ def check_path(path, overwrite=True):
             return_value = True
         else:
             if overwrite:
-                print("Stopping macro!")
-                exit()
+                if not continue_if_n:
+                    print("Stopping macro!")
+                    exit()
             else:
                 print("Directory not overwritten!")
     else:
@@ -60,8 +61,22 @@ def overwrite_subdirs():
 
 if suite_submission:
 
+    toplevel_common_dir = ""
+    toplevel_common_dirs = []
+    for suite_file in glob.glob(os.path.join(suite_configs, "**", args.suite), recursive=True):
+        suite_path = os.path.dirname(suite_file)
+        suite_configs_file = open(suite_file, "r")
+        SUITE = json.load(suite_configs_file)
+        for k_subsuite in SUITE["network-submission"].keys():
+            for tr_config in SUITE["common"]["training-data"].keys():
+                v_subsuite = SUITE["network-submission"][k_subsuite]
+                final_out_folder = os.path.join(output_folder, tr_config, v_subsuite["output_folder"])
+                toplevel_common_dirs.append(final_out_folder)
+    if toplevel_common_dirs:
+        toplevel_common_dir = os.path.commonpath(toplevel_common_dirs)
+
     if not args.skip_q:
-        overwrite_full = check_path(output_folder, True)
+        overwrite_full = check_path(toplevel_common_dir, True, continue_if_n=True)
 
     for suite_file in glob.glob(os.path.join(suite_configs, "**", args.suite), recursive=True):
         suite_path = os.path.dirname(suite_file)

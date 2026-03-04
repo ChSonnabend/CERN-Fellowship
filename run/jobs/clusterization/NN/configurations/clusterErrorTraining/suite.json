@@ -7,7 +7,7 @@
     "network-submission": {
         "/scratch/csonnabe/cern-fellowship/run/jobs/clusterization/NN/configurations/clusterErrorTraining/configs/configurations.py": {
 			"submit": 1,
-			"output_folder": "clusterError",
+			"output_folder": "clusterErrorSoft",
 			"replace": {
 				"data_path": "latest_clusters.csv"
 			}

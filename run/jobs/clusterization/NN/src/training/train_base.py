@@ -55,7 +55,7 @@ if verbose:
     print("SLURM job ID:", os.environ.get("SLURM_JOBID", "N/A"))
     print("Date (dd/mm/yyyy):",date.strftime('%02d/%02m/%04Y'))
     print("Time (hh/mm/ss):", time.strftime('%02H:%02M:%02S'))
-    print("Output-folder:", args.config.split(".")[0])
+    print("Output-folder:", os.path.abspath(args.config))
 
 
 ########### Import the Neural Network class ###########
@@ -174,9 +174,9 @@ for step, trconf in enumerate(configurations.training_configs):
 
     ### Evaluate training and validation loss over epochs
     deep_update(dict_net, trconf)
-    NeuralNet.training(data, settings=dict_net)
-
-    print("Finished training with loss function:", trconf["GLOBAL"]["loss_function"], "(step", step, ")")
+    if dict_net["GLOBAL"]["epochs"] > 0:
+        NeuralNet.training(data, settings=dict_net)
+        print("Finished training with loss function:", trconf["GLOBAL"]["loss_function"], "(step", step, ")")
 
 ### Save the network and the losses
 NeuralNet.eval()
