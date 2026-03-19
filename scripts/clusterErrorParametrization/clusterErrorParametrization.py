@@ -5,14 +5,21 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
-path = "/lustre/alice/users/csonnab/PhD/jobs/clusterization/QA/output/24012026_PbPb_aMC_24arp2_559843_newTracking_clusterError/gpu_cf/reco/dump_cluster_error.csv"
+path = "/lustre/alice/users/csonnab/PhD/jobs/clusterization/QA/output/06022026_PbPb_aMC_24arp2_559843_newTracking_clusterError/gpu_cf/reco/dump_cluster_error.csv"
 
 s1 = time.time()
-df = pd.read_csv(path)  # add sep=',' if needed
+try:
+    df = pd.read_csv(path, header=None, names=["internal_trkid","cluster.num","err2Y","err2Z","clusterState","cluster.getSigmaPad()","cluster.getSigmaTime()","invAvgCharge","invCharge","xx","yy","zz","mP[0]","mP[1]","mP[2]","mP[3]","mP[4]","mC[0]","mC[2]","mC[5]","mC[9]","mC[14]", "interpolatedY", "interpolatedZ", "interpolatedErrorY", "interpolatedErrorZ"])  # add sep=',' if needed
+except:
+    df = pd.read_csv(path, header=None, names=["internal_trkid","cluster.num","err2Y","err2Z","clusterState","cluster.getSigmaPad()","cluster.getSigmaTime()","invAvgCharge","invCharge","xx","yy","zz","mP[0]","mP[1]","mP[2]","mP[3]","mP[4]","mC[0]","mC[2]","mC[5]","mC[9]","mC[14]"])  # add sep=',' if needed
+
 df = df.iloc[:-1]
 df = df.astype(np.float32)
 s2 = time.time()
 print(f"Time to read data: {s2 - s1:.2f} seconds")
+
+print(df.head())
+print(df.size)
 
 counts = df["cluster.num"].value_counts().sort_index()
 
@@ -35,6 +42,26 @@ latest_clusters = df_filtered.groupby("cluster.num", sort=False).tail(1)
 
 mask_valid = (np.abs(latest_clusters["mP[0]"]) < 400) & (np.abs(latest_clusters["mP[1]"]) < 400)
 latest_clusters = latest_clusters[mask_valid]
+
+mask_positive = ((latest_clusters["yy"] - latest_clusters["mP[0]"])**2 - latest_clusters["mC[0]"] >= 0) & \
+                ((latest_clusters["zz"] - latest_clusters["mP[1]"])**2 - latest_clusters["mC[2]"] >= 0)
+latest_clusters = latest_clusters[mask_positive]
+
+latest_clusters["xx_round"] = latest_clusters["xx"].round(3)
+latest_clusters = latest_clusters.assign(
+    dist2=(latest_clusters["yy"] - latest_clusters["mP[0]"])**2 +
+          (latest_clusters["zz"] - latest_clusters["mP[1]"])**2
+)
+
+latest_clusters = latest_clusters.loc[
+    latest_clusters.groupby(["internal_trkid", "xx_round"])["dist2"].idxmin()
+].drop(columns="dist2")
+latest_clusters.drop(columns="xx_round", inplace=True)
+
+if "interpolatedY" in latest_clusters.columns and "interpolatedZ" in latest_clusters.columns and "interpolatedErrorY" in latest_clusters.columns and "interpolatedErrorZ" in latest_clusters.columns:
+    latest_clusters = latest_clusters.dropna(
+        subset=["interpolatedY", "interpolatedZ", "interpolatedErrorY", "interpolatedErrorZ"]
+    )
 
 latest_clusters.to_csv(os.path.dirname(path) + "/latest_clusters.csv", index=False)
 

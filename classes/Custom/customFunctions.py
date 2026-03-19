@@ -292,7 +292,7 @@ def machinePaths():
         return configs["linux_home"]
     elif ("m2" in hostname.lower()) or ("mbp2" in hostname.lower()) or ("macbook" in hostname.lower()):
         return configs["macOS"]
-    elif "lxbk" in hostname:
+    elif "lxbk" in hostname or "ccsub" in hostname:
         return configs["virgo"]
     elif "login.internal" in hostname: #EPNs
         return configs["epn"]
