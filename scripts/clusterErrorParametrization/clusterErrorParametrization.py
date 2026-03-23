@@ -9,7 +9,7 @@ path = "/lustre/alice/users/csonnab/PhD/jobs/clusterization/QA/output/06022026_P
 
 s1 = time.time()
 try:
-    df = pd.read_csv(path, header=None, names=["internal_trkid","cluster.num","err2Y","err2Z","clusterState","cluster.getSigmaPad()","cluster.getSigmaTime()","invAvgCharge","invCharge","xx","yy","zz","mP[0]","mP[1]","mP[2]","mP[3]","mP[4]","mC[0]","mC[2]","mC[5]","mC[9]","mC[14]", "interpolatedY", "interpolatedZ", "interpolatedErrorY", "interpolatedErrorZ"])  # add sep=',' if needed
+    df = pd.read_csv(path, header=None, names=["internal_trkid","cluster.num","err2Y","err2Z","clusterState","cluster.getSigmaPad()","cluster.getSigmaTime()","invAvgCharge","invCharge","xx","yy","zz","mP[0]","mP[1]","mP[2]","mP[3]","mP[4]","mC[0]","mC[2]","mC[5]","mC[9]","mC[14]","interpolatedY","interpolatedZ","interpolatedErrorY","interpolatedErrorZ","mult"])  # add sep=',' if needed
 except:
     df = pd.read_csv(path, header=None, names=["internal_trkid","cluster.num","err2Y","err2Z","clusterState","cluster.getSigmaPad()","cluster.getSigmaTime()","invAvgCharge","invCharge","xx","yy","zz","mP[0]","mP[1]","mP[2]","mP[3]","mP[4]","mC[0]","mC[2]","mC[5]","mC[9]","mC[14]"])  # add sep=',' if needed
 
