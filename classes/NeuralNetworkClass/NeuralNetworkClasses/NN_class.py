@@ -115,8 +115,6 @@ class NN:
         self.multigpu = self.settings["MACHINE_OPTIONS"]["multigpu"]
         self.verbose = self.settings["MACHINE_OPTIONS"]["verbose"] and (int(os.environ.get("SLURM_PROCID", 0)) == 0)
 
-        if self.settings["GLOBAL"]["weight_init"] is not None:
-            self.__weight_init__() ### Needs to be done before the DDP wrapping
         if self.multigpu:
             healthy = self.detect_healthy_gpus()
             self.rank, self.worldsize = self.multigpu_training_setup()
@@ -132,12 +130,21 @@ class NN:
         return model(X)
 
     def __default_weight_init__(self, weight_init=nn.init.normal_):
-        if weight_init is not None:
-            for layer in self.network.modules():
-                if hasattr(layer, 'weight'):
-                    weight_init(layer.weight)
-                    if layer.bias is not None:
-                        nn.init.constant_(layer.bias, 0.1)
+        if weight_init is None:
+            return
+
+        for m in self.network.modules():
+            if isinstance(m, nn.Linear):
+                weight_init(m.weight)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0.1)
+            elif isinstance(m, (nn.Conv1d, nn.Conv2d, nn.Conv3d)):
+                weight_init(m.weight)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0.1)
+            elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
 
     def __weight_init__(self):
         try:
@@ -585,9 +592,22 @@ class NN:
         # ----------------------------------------------------------------------
         # 7. Wrap model in DDP
         # ----------------------------------------------------------------------
-        self.network = DDP(self.network.to(self.device),
-                        device_ids=[slurm_localid],
-                        output_device=slurm_localid)
+        self.network = self.network.to(self.device)
+
+        if self.settings["GLOBAL"]["weight_init"] is not None:
+            if dist.get_rank() == 0:
+                self.__weight_init__()
+
+            for p in self.network.parameters():
+                dist.broadcast(p.data, src=0)
+            for b in self.network.buffers():
+                dist.broadcast(b.data, src=0)
+
+        self.network = DDP(
+            self.network,
+            device_ids=[slurm_localid],
+            output_device=slurm_localid
+        )
 
         return slurm_localid, worldsize
 

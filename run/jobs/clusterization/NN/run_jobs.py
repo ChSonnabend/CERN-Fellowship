@@ -37,7 +37,7 @@ if suite_submission:
             for tr_config in SUITE["common"]["training-data"].keys():
 
                 v_subsuite = SUITE["network-submission"][k_subsuite]
-                final_out_folder = os.path.join(output_folder, tr_config, v_subsuite["output_folder"])
+                final_out_folder = os.path.join(*filter(None,[output_folder, tr_config, v_subsuite["output_folder"]]))
 
                 if SUITE["network-submission"][k_subsuite]["submit"]:
                     subprocess.run([

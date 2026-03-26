@@ -115,7 +115,7 @@ else:
 
 ### Dictionary creation
 
-job_settings = deep_update(job_settings, local_slurm_defaults, verbose=False)
+job_settings = deep_update(local_slurm_defaults, job_settings, verbose=False)
 job_settings.pop("special-args", None)
 
 ### Script creation
