@@ -1,0 +1,1 @@
+python3 /lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/QA/src/start_campaign.py --campaign-config /lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/QA/configurations/test_config/submission_config.json

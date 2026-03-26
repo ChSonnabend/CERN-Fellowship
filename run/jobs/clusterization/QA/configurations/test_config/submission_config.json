@@ -1,0 +1,79 @@
+{
+    "output_root": "/lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/QA/output/21032026_PbPb_aMC_24arp2_559843_newTracking_clusterError_application1_8_32/Y1Z1",
+    "base_config_template": "/lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/QA/configurations/test_config/default_config.json",
+    "submission_config_template": "/lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/QA/config.json",
+    "create_jobs_script": "/lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/QA/create_jobs.py",
+    "run_jobs_script": "/lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/QA/run_jobs.py",
+    "controller_script": "/lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/QA/src/orchestrator.py",
+    "apptainer_image": "/lustre/alice/users/csonnab/TPC/TPC_PRODUCTION/Containers/rocm_torch_env.sif",
+    "inner_fit_script": "/lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/QA/src/fit.py",
+    "apptainer_bind_paths": [
+        "/lustre",
+        "/cvmfs",
+        "/tmp"
+    ],
+    "scan_params": [
+        "nnScaleClusterErrorY",
+        "nnScaleClusterErrorZ",
+        "scaleChiY1",
+        "scaleChiZ1"
+    ],
+    "initial_lhs_samples": 40,
+    "initial_lhs_seed": 42,
+    "lhs_bounds": [
+        [
+            0,
+            1000
+        ],
+        [
+            0,
+            1000
+        ],
+        [
+            0,
+            1000
+        ],
+        [
+            0,
+            1000
+        ]
+    ],
+    "initial_half_widths": [
+        0.05,
+        0.5,
+        0.1,
+        0.1
+    ],
+    "min_half_widths": [
+        0.005,
+        0.05,
+        0.005,
+        0.005
+    ],
+    "lhs_log_space": [
+        0,
+        0,
+        0,
+        0
+    ],
+    "lhs_samples": 40,
+    "lhs_seed": 42,
+    "include_center": 1,
+    "hidden_sizes": [
+        64,
+        64
+    ],
+    "lr": 0.01,
+    "n_epochs": 10000,
+    "extremum_mode": "max",
+    "interpolation_log_space": 0,
+    "mode": 1,
+    "nn_model_path": "/lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/NN/output/21-03-2026/clusterErrorMSE/8_32/network/net.onnx",
+    "metric_scale": 14000000.0,
+    "max_iterations": 20,
+    "watchdog_poll_seconds": 120,
+    "watchdog_max_runtime_seconds": 3600,
+    "watchdog_max_requeues": 3,
+    "python": "python3",
+    "controller_sbatch_time": "8:00:00"
+}

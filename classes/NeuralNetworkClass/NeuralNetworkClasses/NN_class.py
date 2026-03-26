@@ -21,187 +21,12 @@ from onnxconverter_common import auto_mixed_precision
 from NeuralNetworkClass.NeuralNetworkClasses.utils.functions import deep_update, print_dict
 from  NeuralNetworkClass.NeuralNetworkClasses.utils.custom_loss_functions import *
 
-from  NeuralNetworkClass.NeuralNetworkClasses.modules.linear import fc_layer
-from  NeuralNetworkClass.NeuralNetworkClasses.modules.conv2d import conv2d_layer
-from  NeuralNetworkClass.NeuralNetworkClasses.modules.conv1d import conv1d_layer
-from  NeuralNetworkClass.NeuralNetworkClasses.modules.maxpool2d import maxpool2d_layer
-from  NeuralNetworkClass.NeuralNetworkClasses.modules.batchnorm2d import batchnorm2d_layer
-from  NeuralNetworkClass.NeuralNetworkClasses.modules.adaptiveAvgPool2d import adaptiveAvgPool2d_layer
-from  NeuralNetworkClass.NeuralNetworkClasses.modules.flatten import flatten
-from  NeuralNetworkClass.NeuralNetworkClasses.modules.resnet_basic import resnet_basic_layer
-from  NeuralNetworkClass.NeuralNetworkClasses.modules.dropout import dropout_layer
-from  NeuralNetworkClass.NeuralNetworkClasses.modules.RBF import gaussian_layer
-
-
 import os
 import timeit
 import socket
 import onnx
 
 print_flush = functools.partial(print, flush=True)
-
-
-### This layer dictionary will be used to assign the
-### layers in General_NN accoriding to a list of strings
-
-layer_dictionary = {
-    "fc": "fc_layer",
-    "conv2d": "conv2d_layer",
-    "conv1d": "conv1d_layer",
-    "maxpool": "maxpool2d_layer",
-    "flatten": "flatten",
-    "dropout": "dropout_layer",
-    "adapool": "adaptiveAvgPool2d_layer",
-    "downsample": "downsampling2d_channels_layer",
-    "resnet_basic": "resnet_basic_layer",
-    "rbf_gaussian": "gaussian_layer",
-    "resnet_full": "ResNetImg",
-}
-
-### General_NN: A class which can define a Neural network according to strings given in layer_types,
-### activation funcitons given in act_func and parameters given in params (typically dimensions of in, out and kernel)
-
-
-class General_NN(nn.Module):
-
-    def __init__(
-        self,
-        settings={
-            "GLOBAL": {
-                "parameters": [[1, 1, 3]],
-                "layer_types": ["conv1d"],
-                "activation_functions": [nn.ReLU],
-                "weight_init": torch.nn.init.xavier_uniform_,
-            },
-            "DATA": {
-                "scale_data": True,
-            },
-            "MACHINE_OPTIONS": {
-                "device": None,
-                "dtype": torch.float},
-            "OTHER": {
-                "verbose": True,
-            },
-        },
-    ):
-
-        super(General_NN, self).__init__()
-
-        self.mode = "eval"
-
-        self.parameters, self.layer_types, self.activation_functions = (
-            settings["GLOBAL"]["parameters"],
-            settings["GLOBAL"]["layer_types"],
-            settings["GLOBAL"]["activation_functions"],
-        )
-
-        self.dtype = settings["MACHINE_OPTIONS"]["dtype"]
-        if settings["MACHINE_OPTIONS"]["device"] is None:
-            if torch.cuda.is_available():
-                self.device = "cuda"
-            elif torch.backends.mps.is_available():
-                self.device = "mps"
-            else:
-                self.device = "cpu"
-        else:
-            self.device = settings["MACHINE_OPTIONS"]["device"]
-
-        self.scaling_X = []
-        self.scaling_Y = []
-        self.inverse_X = []
-        self.inverse_Y = []
-        self.scale = settings["DATA"]["scale_data"]
-
-        if len(self.parameters) != len(self.activation_functions):
-
-            raise ValueError(
-                "len(layers_sizes): {val1} and len(act_func): {val2} have different length, but must be of same length!".format(
-                    val1=len(self.parameters), val2=len(self.activation_functions)
-                )
-            )
-
-        ########### Define the network ##############
-
-        self.layers = nn.ModuleList()
-
-        print_flush("\nThis is the network structure:\n")
-
-        for i in range(len(self.params)):
-            self.layers.append(
-                eval(
-                    layer_dictionary[self.layer_types[i]]
-                    + '(params=self.params[i], activation=self.activation_functions[i], weight_init=settings["GLOBAL"]["weight_init"], verbose=settings["OTHER"]["verbose"], device=self.device, dtype=self.dtype)'
-                )
-            )
-
-        self.layers_seq = nn.Sequential(*self.layers)
-
-    @torch.jit.ignore
-    def forward(self, X):
-
-        if self.mode == "train":
-
-            ### Data is expected to be scaled already
-
-            output = self.layers_seq(self.dtype(X))
-
-        elif self.mode == "eval":
-
-            ### Check for device and datascaling
-
-            if isinstance(X, np.ndarray):
-
-                if self.scale and self.scaling_X:
-                    scaled = self.scaling_X.scale(X)
-                else:
-                    scaled = torch.tensor(X)
-
-                predict = self.layers_seq(self.dtype(scaled))
-
-                if self.scale and self.inverse_Y:
-                    output = self.inverse_Y.scale(predict.cpu().detach().numpy())
-                else:
-                    output = predict
-
-            elif isinstance(X, torch.Tensor):
-
-                if self.scale and self.scaling_X:
-                    scaled = self.scaling_X.scale(X.cpu().detach().numpy())
-                else:
-                    scaled = X
-
-                predict = self.layers_seq(self.dtype(scaled))
-
-                if self.scale and self.inverse_Y:
-                    output = self.inverse_Y.scale(predict.cpu().detach().numpy())
-                else:
-                    output = predict
-
-            else:
-
-                print_flush(
-                    "Data was neither numpy.ndarray nor torch.Tensor... Evaluating by conversion..."
-                )
-
-                if self.scale and self.scaling_X:
-                    scaled = self.scaling_X.scale(np.array(X))
-                else:
-                    scaled = torch.tensor(X)
-
-                predict = self.layers_seq(self.dtype(scaled))
-
-                if self.scale and self.inverse_Y:
-                    output = self.inverse_Y.scale(predict.cpu().detach().numpy())
-                else:
-                    output = predict
-
-        else:
-
-            print_flush("Network must be in mode (eval) or (train). Please specify!")
-            output = False
-
-        return output
-
 
 ### NN: A class for training a Neural network and predicting output (so to say a wrapper class for a General_NN)
 
@@ -305,7 +130,7 @@ class NN:
         else:
             model = self.network
         return model(X)
-    
+
     def __default_weight_init__(self, weight_init=nn.init.normal_):
         if weight_init is not None:
             for layer in self.network.modules():
@@ -548,7 +373,7 @@ class NN:
 
             if self.multigpu:
                 dist.barrier()
-    
+
             ### Iterating through the validation data ###
             val_loss = 0
             for counter, entry_val in enumerate(validation_dataloader, 0):
@@ -800,7 +625,7 @@ class NN:
             healthy = list(range(count))
             print_flush("Healthy GPUs:", healthy)
             return healthy
-        
+
         else:
             healthy = []
 

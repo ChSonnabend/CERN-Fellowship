@@ -1,0 +1,27 @@
+{
+    "directory_settings": {
+        "O2_container": "/lustre/alice/singularity/singularity_o2dev_alma9.sif",
+        "O2_dir": "/scratch/alice/csonnab/MyO2/sw",
+        "O2_env": "O2::latest-o2",
+        "token_dir": "/lustre/alice/users/csonnab/token_dir"
+    },
+    "submission": {
+        "qa_script": "/lustre/alice/users/csonnab/PhD/jobs/clusterization/QA/src/qa_full.py",
+        "secvtx_script": "/lustre/alice/users/csonnab/PhD/jobs/clusterization/QA/src/secondaryVertexing.C",
+        "valid_elements_script": "/lustre/alice/users/csonnab/PhD/jobs/clusterization/QA/src/keepValidElementsRoot.C",
+        "ratio_script": "/lustre/alice/users/csonnab/PhD/jobs/clusterization/QA/src/ratio_histograms.C",
+        "tracks_script": "/lustre/alice/users/csonnab/PhD/jobs/clusterization/QA/src/trackQA.C",
+        "configurations_dir": "/lustre/alice/users/csonnab/PhD/jobs/clusterization/QA/configurations/clusterErrorXYgrid1"
+    },
+    "job_settings": {
+        "partition": "high_mem",
+        "time": 180,
+        "cpus-per-task": 64,
+        "mem": "256G"
+    },
+    "RECO": {
+        "cpus-per-task": 36,
+        "mem": "128G",
+        "time": "360"
+    }
+}

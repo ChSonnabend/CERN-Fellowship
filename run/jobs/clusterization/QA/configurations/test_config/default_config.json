@@ -1,0 +1,118 @@
+{
+    "exec_settings": {
+        "simulation_dir": "/lustre/alice/users/csonnab/PhD/jobs/simulation/sim_data/validation/o2sim_28092025_anchoredMC_24arp2_559843_newTracking/SC/0_5/25EV_1",
+        "output_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/QA/output/19032026_PbPb_aMC_24arp2_559843_newTracking_clusterError_application1_16_32_3"
+    },
+    "data_settings": {
+        "real-data": 0,
+        "use-track-paths": 1,
+        "remove-misc-files": 1,
+        "from-aod": 0
+    },
+    "qa_task": {
+        "tpc-sectors": "0-35",
+        "verbose": 2,
+        "threads": 9,
+        "size-row": 7,
+        "size-pad": 7,
+        "size-time": 7,
+        "network-input-size": 100000,
+        "create-output": 1,
+        "write-native-file": 0,
+        "mode": "matcher,looper_tagger,native,track_clusters,occupancy,overlap",
+        "normalization-mode": 1,
+        "network-classification-paths": "/lustre/alice/users/csonnab/PhD/jobs/clusterization/NN/output/study_input_size_2_22012025/sim/classification_777/dummy/network/net.onnx",
+        "network-regression-paths": "/lustre/alice/users/csonnab/PhD/jobs/clusterization/NN/output/study_input_size_2_22012025/sim/regression_155/dummy/network/net.onnx",
+        "network-num-threads": 1,
+        "network-class-threshold": 0.12,
+        "network-threshold-sigmoid-trafo": 1,
+        "network-split-iroc-oroc": 0,
+        "looper-tagger-threshold-num": "{\\\"values\\\":[4]}",
+        "looper-tagger-threshold-q": "{\\\"values\\\":[70.0]}",
+        "looper-tagger-granularity": "{\\\"values\\\":[10]}",
+        "looper-tagger-padwindow": "{\\\"values\\\":[30]}",
+        "looper-tagger-timewindow": "{\\\"values\\\":[40]}",
+        "max-time": -1,
+        "infile-native": "tpc-native-clusters.root",
+        "infile-tracks": "tpctracks.root",
+        "outfile-native": "tpc-native-clusters.root",
+        "outfile-clusters": "custom_clusters.root",
+        "magnetic-field": -5.0,
+        "read-tracks-mc-information": 0
+    },
+    "reco_task": {
+        "input-clusters": {
+            "shm-segment-size": 16000000000,
+            "input-type": "clusters",
+            "output-type": "clusters,tracks,tpc-triggers",
+            "resources-monitoring": 2,
+            "configKeyValues": {
+                "GPU_proc": {
+                    "runMC": 1,
+                    "runQA": 1,
+                    "nTPCClustererLanes": 36
+                },
+                "GPU_global": {
+                    "rundEdx": 1
+                },
+                "GPU_QA": {
+                    "output": "histograms.root"
+                }
+            }
+        },
+        "input-digits": {
+            "shm-segment-size": 16000000000,
+            "tpc-digit-reader": "--infile /lustre/alice/users/csonnab/PhD/jobs/simulation/sim_data/validation/o2sim_11042025_fullSuite/SC/PbPb/50kHz/tpcdigits.root",
+            "input-type": "digits",
+            "output-type": "clusters,tracks,tpc-triggers",
+            "resources-monitoring": 2,
+            "configKeyValues": {
+                "GPU_proc_nn": {
+                    "applyNNclusterizer": 0,
+                    "nnClassificationPath": "/lustre/alice/users/csonnab/PhD/jobs/clusterization/NN/output/study_input_size_2_22012025/sim/classification_777/dummy/network/net.onnx",
+                    "nnRegressionPath": "/lustre/alice/users/csonnab/PhD/jobs/clusterization/NN/output/study_input_size_2_22012025/sim/regression_155/dummy/network/net.onnx",
+                    "nnClassThreshold": 0.5,
+                    "nnSigmoidTrafoClassThreshold": 1,
+                    "nnClusterizerBatchedMode": 8192,
+                    "nnClusterizerAddIndexData": 1,
+                    "nnInferenceIntraOpNumThreads": 1,
+                    "nnInferenceInterOpNumThreads": 1,
+                    "nnClusterizerUseCfRegression": 0,
+                    "nnClusterizerSizeInputRow": 3,
+                    "nnClusterizerSizeInputPad": 5,
+                    "nnClusterizerSizeInputTime": 5,
+                    "nnInferenceVerbosity": 3,
+                    "nnClusterizerVerbosity": 2,
+                    "nnClusterizerApplyCfDeconvolution": 0,
+                    "nnClusterizerBoundaryFillValue": 0,
+                    "nnClusterizerSetDeconvolutionFlags": 1,
+                    "nnLoadFromCCDB": 0,
+                    "nnClusterErrorModelPath": "/lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/NN/output/17-03-2026/clusterErrorMSE/16_32/network/net.onnx",
+                    "nnUseClusterErrorNetwork": 1,
+                    "dumpClusterErrorCSV": 0,
+                    "nnScaleClusterErrorY": 0.12401670240819,
+                    "nnScaleClusterErrorZ": 4.997318264639912,
+                    "nnClusterErrorNetworkVersion": 2,
+                    "scaleChiY1": 1.0,
+                    "scaleChiY2": 1.0,
+                    "scaleChiY3": 1.0,
+                    "scaleChiZ1": 1.0,
+                    "scaleChiZ2": 1.0,
+                    "scaleChiZ3": 1.0
+
+                },
+                "GPU_proc": {
+                    "runMC": 1,
+                    "runQA": 1,
+                    "nTPCClustererLanes": 1
+                },
+                "GPU_global": {
+                    "rundEdx": 1
+                },
+                "GPU_QA": {
+                    "output": "histograms.root"
+                }
+            }
+        }
+    }
+}
