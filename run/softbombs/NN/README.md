@@ -190,7 +190,7 @@ An AMD-ready config is provided as `configs/amd_config.json`, and training can b
 bash scripts/submit_train_amd.sh
 ```
 
-An EPN-ready config following the `o2-tpc-pid` convention is provided as `configs/epn_config.json`. It submits to `prod`, requests GPUs with `--gres`, runs through `srun`, and uses direct `python3.9` after `module load O2PDPSuite` instead of Apptainer:
+An EPN-ready config following the `o2-tpc-pid` convention is provided as `configs/epn_config.json`. It submits to `prod`, requests GPUs with `--gres`, runs through `srun`, and uses direct `python3.9` after `module load O2PDPSuite`. No Apptainer container is used for EPN jobs:
 
 ```bash
 bash scripts/submit_train_epn.sh

@@ -61,6 +61,9 @@ def runtime_setup_lines(config, slurm, stage, stage_label):
     project_output = Path(config["project"]["output_dir"]).resolve()
     cache_base = Path(slurm.get("cache_dir") or Path(config["project"]["output_dir"]) / "runtime")
     cache_base = cache_base.resolve()
+    cache_dirs = "tmp,xdg_cache,torch,triton,miopen,rocm,comgr,pycache"
+    if slurm.get("container"):
+        cache_dirs = "tmp,apptainer_cache," + cache_dirs
     lines = [
         'export SOFTBOMB_JOB_STAMP="$(date +%Y%m%d)_${SLURM_JOB_ID:-local_$$}"',
         f'export SOFTBOMB_JOB_OUTPUT_DIR="{project_output}/jobs/${{SOFTBOMB_JOB_STAMP}}"',
@@ -78,7 +81,7 @@ def runtime_setup_lines(config, slurm, stage, stage_label):
         'echo "Job output directory: $SOFTBOMB_JOB_OUTPUT_DIR"',
         'echo "Job stdout: $SOFTBOMB_JOB_STDOUT"',
         'echo "Job stderr: $SOFTBOMB_JOB_STDERR"',
-        'mkdir -p "$SOFTBOMB_JOB_RUNTIME"/{tmp,apptainer_cache,xdg_cache,torch,triton,miopen,rocm,comgr,pycache}',
+        f'mkdir -p "$SOFTBOMB_JOB_RUNTIME"/{{{cache_dirs}}}',
         'mkdir -p "$SOFTBOMB_SHORT_TMP"',
         'cleanup_softbomb_runtime() {',
         '  local status=$?',
@@ -103,10 +106,6 @@ def runtime_setup_lines(config, slurm, stage, stage_label):
         'export TMPDIR="$SOFTBOMB_SHORT_TMP"',
         'export TEMP="$TMPDIR"',
         'export TMP="$TMPDIR"',
-        'export APPTAINER_TMPDIR="$SOFTBOMB_JOB_RUNTIME/tmp"',
-        'export APPTAINER_CACHEDIR="$SOFTBOMB_JOB_RUNTIME/apptainer_cache"',
-        'export SINGULARITY_TMPDIR="$SOFTBOMB_JOB_RUNTIME/tmp"',
-        'export SINGULARITY_CACHEDIR="$SOFTBOMB_JOB_RUNTIME/apptainer_cache"',
         'export XDG_CACHE_HOME="$SOFTBOMB_JOB_RUNTIME/xdg_cache"',
         'export TORCH_HOME="$SOFTBOMB_JOB_RUNTIME/torch"',
         'export TRITON_CACHE_DIR="$SOFTBOMB_JOB_RUNTIME/triton"',
@@ -116,31 +115,40 @@ def runtime_setup_lines(config, slurm, stage, stage_label):
         'export HIP_CACHE_DIR="$SOFTBOMB_JOB_RUNTIME/rocm"',
         'export AMD_COMGR_CACHE_DIR="$SOFTBOMB_JOB_RUNTIME/comgr"',
         'export PYTHONPYCACHEPREFIX="$SOFTBOMB_JOB_RUNTIME/pycache"',
-        'export APPTAINERENV_TMPDIR="$TMPDIR"',
-        'export APPTAINERENV_TEMP="$TEMP"',
-        'export APPTAINERENV_TMP="$TMP"',
-        'export APPTAINERENV_XDG_CACHE_HOME="$XDG_CACHE_HOME"',
-        'export APPTAINERENV_TORCH_HOME="$TORCH_HOME"',
-        'export APPTAINERENV_TRITON_CACHE_DIR="$TRITON_CACHE_DIR"',
-        'export APPTAINERENV_MIOPEN_USER_DB_PATH="$MIOPEN_USER_DB_PATH"',
-        'export APPTAINERENV_MIOPEN_CUSTOM_CACHE_DIR="$MIOPEN_CUSTOM_CACHE_DIR"',
-        'export APPTAINERENV_ROCM_CACHE_DIR="$ROCM_CACHE_DIR"',
-        'export APPTAINERENV_HIP_CACHE_DIR="$HIP_CACHE_DIR"',
-        'export APPTAINERENV_AMD_COMGR_CACHE_DIR="$AMD_COMGR_CACHE_DIR"',
-        'export APPTAINERENV_PYTHONPYCACHEPREFIX="$PYTHONPYCACHEPREFIX"',
-        'export SINGULARITYENV_TMPDIR="$TMPDIR"',
-        'export SINGULARITYENV_TEMP="$TEMP"',
-        'export SINGULARITYENV_TMP="$TMP"',
-        'export SINGULARITYENV_XDG_CACHE_HOME="$XDG_CACHE_HOME"',
-        'export SINGULARITYENV_TORCH_HOME="$TORCH_HOME"',
-        'export SINGULARITYENV_TRITON_CACHE_DIR="$TRITON_CACHE_DIR"',
-        'export SINGULARITYENV_MIOPEN_USER_DB_PATH="$MIOPEN_USER_DB_PATH"',
-        'export SINGULARITYENV_MIOPEN_CUSTOM_CACHE_DIR="$MIOPEN_CUSTOM_CACHE_DIR"',
-        'export SINGULARITYENV_ROCM_CACHE_DIR="$ROCM_CACHE_DIR"',
-        'export SINGULARITYENV_HIP_CACHE_DIR="$HIP_CACHE_DIR"',
-        'export SINGULARITYENV_AMD_COMGR_CACHE_DIR="$AMD_COMGR_CACHE_DIR"',
-        'export SINGULARITYENV_PYTHONPYCACHEPREFIX="$PYTHONPYCACHEPREFIX"',
     ]
+    if slurm.get("container"):
+        lines.extend(
+            [
+                'export APPTAINER_TMPDIR="$SOFTBOMB_JOB_RUNTIME/tmp"',
+                'export APPTAINER_CACHEDIR="$SOFTBOMB_JOB_RUNTIME/apptainer_cache"',
+                'export SINGULARITY_TMPDIR="$SOFTBOMB_JOB_RUNTIME/tmp"',
+                'export SINGULARITY_CACHEDIR="$SOFTBOMB_JOB_RUNTIME/apptainer_cache"',
+                'export APPTAINERENV_TMPDIR="$TMPDIR"',
+                'export APPTAINERENV_TEMP="$TEMP"',
+                'export APPTAINERENV_TMP="$TMP"',
+                'export APPTAINERENV_XDG_CACHE_HOME="$XDG_CACHE_HOME"',
+                'export APPTAINERENV_TORCH_HOME="$TORCH_HOME"',
+                'export APPTAINERENV_TRITON_CACHE_DIR="$TRITON_CACHE_DIR"',
+                'export APPTAINERENV_MIOPEN_USER_DB_PATH="$MIOPEN_USER_DB_PATH"',
+                'export APPTAINERENV_MIOPEN_CUSTOM_CACHE_DIR="$MIOPEN_CUSTOM_CACHE_DIR"',
+                'export APPTAINERENV_ROCM_CACHE_DIR="$ROCM_CACHE_DIR"',
+                'export APPTAINERENV_HIP_CACHE_DIR="$HIP_CACHE_DIR"',
+                'export APPTAINERENV_AMD_COMGR_CACHE_DIR="$AMD_COMGR_CACHE_DIR"',
+                'export APPTAINERENV_PYTHONPYCACHEPREFIX="$PYTHONPYCACHEPREFIX"',
+                'export SINGULARITYENV_TMPDIR="$TMPDIR"',
+                'export SINGULARITYENV_TEMP="$TEMP"',
+                'export SINGULARITYENV_TMP="$TMP"',
+                'export SINGULARITYENV_XDG_CACHE_HOME="$XDG_CACHE_HOME"',
+                'export SINGULARITYENV_TORCH_HOME="$TORCH_HOME"',
+                'export SINGULARITYENV_TRITON_CACHE_DIR="$TRITON_CACHE_DIR"',
+                'export SINGULARITYENV_MIOPEN_USER_DB_PATH="$MIOPEN_USER_DB_PATH"',
+                'export SINGULARITYENV_MIOPEN_CUSTOM_CACHE_DIR="$MIOPEN_CUSTOM_CACHE_DIR"',
+                'export SINGULARITYENV_ROCM_CACHE_DIR="$ROCM_CACHE_DIR"',
+                'export SINGULARITYENV_HIP_CACHE_DIR="$HIP_CACHE_DIR"',
+                'export SINGULARITYENV_AMD_COMGR_CACHE_DIR="$AMD_COMGR_CACHE_DIR"',
+                'export SINGULARITYENV_PYTHONPYCACHEPREFIX="$PYTHONPYCACHEPREFIX"',
+            ]
+        )
     if stage == "train":
         lines.extend(
             [
@@ -263,7 +271,7 @@ def main():
     if args.dry_run:
         print(script)
         return
-    result = subprocess.check_output(["sbatch", str(script_path)], text=True)
+    result = subprocess.check_output(["sbatch", str(script_path)], universal_newlines=True)
     print(result.strip())
 
 
