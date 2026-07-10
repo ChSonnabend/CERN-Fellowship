@@ -37,7 +37,11 @@ def seed_everything(seed):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    try:
+        if torch.cuda.is_available() and torch.cuda.device_count() > 0:
+            torch.cuda.manual_seed_all(seed)
+    except Exception as exc:
+        print(f"Skipping CUDA seed setup because CUDA is not fully usable yet: {exc}")
 
 
 def make_loader(path, batch_size, num_workers, shuffle):

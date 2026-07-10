@@ -2,6 +2,7 @@
 import argparse
 import csv
 import json
+import os
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -42,6 +43,53 @@ def autocast_context(device, enabled):
     if hasattr(torch, "amp") and hasattr(torch.amp, "autocast"):
         return torch.amp.autocast(device_type=device.type, enabled=enabled)
     return torch.cuda.amp.autocast(enabled=enabled)
+
+
+def cuda_diagnostics():
+    fields = {
+        "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES", "<unset>"),
+        "torch_version": getattr(torch, "__version__", "<unknown>"),
+        "torch_cuda_version": getattr(torch.version, "cuda", None),
+        "torch_hip_version": getattr(torch.version, "hip", None),
+    }
+    try:
+        fields["cuda_available"] = torch.cuda.is_available()
+    except Exception as exc:
+        fields["cuda_available"] = f"error: {exc}"
+    try:
+        fields["cuda_device_count"] = torch.cuda.device_count()
+    except Exception as exc:
+        fields["cuda_device_count"] = f"error: {exc}"
+    return fields
+
+
+def format_diagnostics(fields):
+    return ", ".join(f"{key}={value}" for key, value in fields.items())
+
+
+def resolve_device(train_cfg):
+    requested = str(train_cfg.get("device", "cuda")).lower()
+    if requested == "auto":
+        diagnostics = cuda_diagnostics()
+        device_count = diagnostics.get("cuda_device_count", 0)
+        if diagnostics.get("cuda_available") is True and isinstance(device_count, int) and device_count > 0:
+            return torch.device("cuda")
+        print(f"CUDA not selected for device=auto: {format_diagnostics(diagnostics)}")
+        return torch.device("cpu")
+
+    if requested.startswith("cuda"):
+        diagnostics = cuda_diagnostics()
+        device_count = diagnostics.get("cuda_device_count", 0)
+        print(f"CUDA diagnostics before training: {format_diagnostics(diagnostics)}")
+        if diagnostics.get("cuda_available") is not True or not isinstance(device_count, int) or device_count < 1:
+            raise RuntimeError(
+                "CUDA was requested, but PyTorch does not see a usable CUDA/HIP device. "
+                "On EPN this usually means the job did not receive/export a GPU, or the imported PyTorch "
+                "build does not match the EPN GPU runtime. "
+                f"Diagnostics: {format_diagnostics(diagnostics)}"
+            )
+
+    return torch.device(requested)
 
 
 def write_predictions_csv(path, split_path, y_true, logits, probs, pred):
@@ -169,10 +217,7 @@ def main():
     input_dim = int(sample["x"].shape[-1])
     max_tracks = int(sample["x"].shape[1])
 
-    device_name = train_cfg.get("device", "cuda")
-    if device_name == "cuda" and not torch.cuda.is_available():
-        device_name = "cpu"
-    device = torch.device(device_name)
+    device = resolve_device(train_cfg)
 
     model = build_model_from_config(config, input_dim=input_dim, max_tracks=max_tracks).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=train_cfg["learning_rate"], weight_decay=train_cfg["weight_decay"])

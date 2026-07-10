@@ -17,6 +17,7 @@
     "use_srun": true,
     "setup_commands": [
       "module load O2PDPSuite",
+      "export PYTHONNOUSERSITE=1",
       "export PYTHONPATH=/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/src:${PYTHONPATH:-}"
     ]
   }
