@@ -1,0 +1,20 @@
+{
+  "inherits": "softbomb_config.json",
+  "training": {
+    "device": "cpu",
+    "mixed_precision": false,
+    "epochs": 2,
+    "batch_size": 16,
+    "num_workers": 2
+  },
+  "slurm": {
+    "device": "CPU",
+    "cpu_partition": "debug",
+    "time": "00:30:00",
+    "mem": "32G",
+    "cpus_per_task": 4,
+    "cpu_container": "/lustre/alice/users/csonnab/TPC/TPC_PRODUCTION/Containers/cuda_torch_env.sif",
+    "gres": null,
+    "constraint": null
+  }
+}

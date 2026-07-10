@@ -1,0 +1,15 @@
+{
+  "inherits": "amd_config.json",
+  "training": {
+    "output_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/training_amd_smoke",
+    "epochs": 1,
+    "batch_size": 16,
+    "num_workers": 2,
+    "export_onnx": false
+  },
+  "slurm": {
+    "time": "00:30:00",
+    "mem": "64G",
+    "cpus_per_task": 4
+  }
+}

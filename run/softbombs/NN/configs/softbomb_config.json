@@ -1,0 +1,191 @@
+{
+  "project": {
+    "name": "softbomb_transformer",
+    "framework": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN",
+    "output_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer",
+    "seed": 1337
+  },
+  "input": {
+    "file_pattern": "AO2D.root",
+    "prefer_merged_aod_per_job": true,
+    "exclude_path_substrings": [],
+    "classes": [
+      {
+        "name": "softbomb",
+        "label": 1,
+        "alien_path": "/alice/cern.ch/user/p/pwg_pp/selfjobs/Mesut100kIRpp13TeVFullT05-20260706-120258/2*",
+        "local_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/data/Mesut100kIRpp13TeVFullT05-20260706-120258",
+        "max_files": null
+      },
+      {
+        "name": "background",
+        "label": 0,
+        "alien_path": "/alice/cern.ch/user/p/pwg_pp/selfjobs/Mesut100kIRpp13TeV-20260706-120347/2*",
+        "local_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/data/Mesut100kIRpp13TeV-20260706-120347",
+        "max_files": null
+      }
+    ]
+  },
+  "download": {
+    "o2_workdir": "/scratch/alice/csonnab/MyO2",
+    "alienv_package": "O2/latest",
+    "needed_file_patterns": [
+      "AO2D.root"
+    ],
+    "preserve_structure": true,
+    "prefer_merged_aod_per_job": true,
+    "exclude_path_substrings": [],
+    "overwrite": false,
+    "dry_run": false
+  },
+  "dataset": {
+    "output_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/data",
+    "tree_name": null,
+    "track_tree_name": "O2track_iu",
+    "track_extra_tree_name": "O2trackextra",
+    "load_latest_cycles": true,
+    "max_tracks": 2048,
+    "min_tracks": 2,
+    "max_events_per_class": null,
+    "validation_fraction": 0.15,
+    "test_fraction": 0.15,
+    "holdout_fraction": 0.15,
+    "shuffle_seed": 1337,
+    "sort_tracks_by": "momentum",
+    "sort_descending": true,
+    "drop_nan_tracks": true,
+    "skip_bad_files": true,
+    "normalize": true,
+    "clip_quantiles": [
+      0.001,
+      0.999
+    ],
+    "event_id_branches": [
+      "fCollisionId",
+      "collisionId",
+      "fIndexCollisions",
+      "fIndexMcCollisions",
+      "fMcCollisionId",
+      "eventId",
+      "EventId"
+    ],
+    "features": {
+      "tpc_dedx": {
+        "branches": [
+          "fTPCSignal",
+          "tpcSignal",
+          "TPCSignal",
+          "dEdxTPC",
+          "fTPCdEdx"
+        ]
+      },
+      "tof_beta": {
+        "branches": [
+          "fTOFBeta",
+          "tofBeta",
+          "TOFBeta",
+          "beta",
+          "fBeta"
+        ],
+        "fallback_branches": [
+          "fTOFExpMom",
+          "tofExpMom",
+          "TOFExpMom"
+        ]
+      },
+      "momentum": {
+        "branches": [
+          "fP",
+          "p",
+          "P",
+          "momentum"
+        ],
+        "derive_from": {
+          "pt": [
+            "fPt",
+            "pt",
+            "Pt"
+          ],
+          "signed_inverse_pt": [
+            "fSigned1Pt",
+            "signed1Pt",
+            "signedOneOverPt"
+          ],
+          "tan_lambda": [
+            "fTgl",
+            "tgl",
+            "tanLambda"
+          ]
+        }
+      },
+      "tan_lambda": {
+        "branches": [
+          "fTgl",
+          "tgl",
+          "tanLambda",
+          "fTanLambda"
+        ]
+      },
+      "sin_phi": {
+        "branches": [
+          "fSnp",
+          "snp",
+          "sinPhi",
+          "fSinPhi"
+        ]
+      }
+    },
+    "include_event_multiplicity": false
+  },
+  "training": {
+    "dataset_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/data",
+    "output_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/training",
+    "epochs": 80,
+    "batch_size": 64,
+    "num_workers": 4,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.01,
+    "early_stopping_patience": 12,
+    "gradient_clip_norm": 1.0,
+    "mixed_precision": true,
+    "device": "cuda",
+    "threshold": 0.5,
+    "evaluate_after_train": true,
+    "post_training_split": "holdout",
+    "qa_plots_after_train": true,
+    "qa_event_index": 0,
+    "qa_max_attention_tracks": 64,
+    "model": {
+      "d_model": 128,
+      "n_heads": 8,
+      "n_layers": 4,
+      "dim_feedforward": 256,
+      "dropout": 0.1,
+      "use_positional_encoding": false
+    },
+    "export_onnx": true
+  },
+  "slurm": {
+    "account": null,
+    "device": "NVIDIA_H200_GPU",
+    "partition": "nvidia_gpu",
+    "constraint": "h200",
+    "time": "12:00:00",
+    "mem": "120G",
+    "cpus_per_task": 8,
+    "gres": "gpu:1",
+    "mail_type": "END,FAIL",
+    "mail_user": "",
+    "cuda_container": "/lustre/alice/users/csonnab/TPC/TPC_PRODUCTION/Containers/cuda_torch_env.sif",
+    "rocm_container": "/lustre/alice/users/csonnab/TPC/TPC_PRODUCTION/Containers/rocm_torch_env.sif",
+    "cpu_container": "/lustre/alice/users/csonnab/TPC/TPC_PRODUCTION/Containers/cuda_torch_env.sif",
+    "container": "/lustre/alice/users/csonnab/TPC/TPC_PRODUCTION/Containers/cuda_torch_env.sif",
+    "container_runtime": "apptainer",
+    "cache_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/runtime",
+    "keep_central_slurm_logs": false,
+    "setup_commands": [
+      "export PYTHONPATH=/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/src:${PYTHONPATH}"
+    ],
+    "jobs_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/jobs"
+  }
+}

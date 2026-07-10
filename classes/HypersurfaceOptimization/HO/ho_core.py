@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import copy
 
-from scipy.optimize import minimize
+from scipy.optimize import minimize, differential_evolution
 from scipy.interpolate import griddata
 
 import torch
@@ -40,6 +41,8 @@ class HO:
                 "verbose": True,
                 "seed": 0,
                 "log_space": True,
+                "use_validation_model": False,
+                "validation_split": 0.2,
 
                 "do_plot": False,
                 "plot_mode": "slice",
@@ -120,10 +123,10 @@ class HO:
 
     def _parse_part(self, x):
         return float(f"{x[0]}.{x[1:]}")
-    
+
     def _parse_part_2(self, x):
         return float(x)
-    
+
     def _parse_points_from_dict(self, dict_analyze, sep="_"):
         """
         Convert a dict of the form
@@ -146,7 +149,7 @@ class HO:
             raise ValueError("Input must contain points with dimension N >= 2.")
 
         return points, vals
-    
+
     def _orthonormalize_two_vectors(self, v1, v2, atol=1e-12):
         """
         Gram-Schmidt orthonormalization of two vectors.
@@ -166,7 +169,7 @@ class HO:
         e2 = v2 / n2
 
         return e1, e2
-    
+
     def _model_space_to_points(self, fit_info, Xn):
         """
         Normalized model space -> raw points.
@@ -185,7 +188,7 @@ class HO:
                 pts[:, i] = 10.0 ** X_transformed[:, i]
 
         return pts
-    
+
     def _points_to_model_space(self, fit_info, points):
         """
         Raw points -> normalized model space.
@@ -209,7 +212,7 @@ class HO:
 
         Xn = (X_transformed - fit_info["x_mean"]) / fit_info["x_std"]
         return Xn
-    
+
     def _make_raw_plot_basis(self, fit_info, center_model, axis_u_model, axis_v_model, eps=1e-4):
         """
         Build a local 2D basis in X_raw induced by the model-space directions.
@@ -238,7 +241,7 @@ class HO:
             "u_hat_model": u_hat_model,
             "v_hat_model": v_hat_model,
         }
-    
+
     # ============================================================
     # PCA
     # ============================================================
@@ -288,7 +291,7 @@ class HO:
             "explained_variance": eigvals[:n_components].copy(),
             "explained_variance_ratio": ratio[:n_components].copy(),
         }
-    
+
     # ============================================================
     # main high-level function
     # ============================================================
@@ -313,6 +316,8 @@ class HO:
         verbose = cfg.get("verbose", True)
         seed = cfg.get("seed", 0)
         log_space = cfg.get("log_space", True)
+        use_validation_model = bool(cfg.get("use_validation_model", False))
+        validation_split = float(cfg.get("validation_split", 0.2))
 
         points = np.asarray(points, dtype=np.float32)
         vals = np.asarray(vals, dtype=np.float32)
@@ -356,26 +361,71 @@ class HO:
         Xn = (X_transformed - x_mean) / x_std
         tn = (t - t_mean) / t_std
 
+        n_samples = Xn.shape[0]
+        do_validation = use_validation_model and (validation_split > 0.0) and (n_samples >= 4)
+
+        train_idx = np.arange(n_samples)
+        val_idx = np.array([], dtype=int)
+        if do_validation:
+            rng = np.random.RandomState(seed)
+            perm = rng.permutation(n_samples)
+            n_val = int(round(n_samples * validation_split))
+            n_val = max(1, min(n_samples - 1, n_val))
+            val_idx = perm[:n_val]
+            train_idx = perm[n_val:]
+            if train_idx.size == 0:
+                do_validation = False
+                train_idx = np.arange(n_samples)
+                val_idx = np.array([], dtype=int)
+
         x_tensor = torch.tensor(Xn, dtype=torch.float32)
         t_tensor = torch.tensor(tn, dtype=torch.float32)
+        x_train_tensor = torch.tensor(Xn[train_idx], dtype=torch.float32)
+        t_train_tensor = torch.tensor(tn[train_idx], dtype=torch.float32)
+        x_val_tensor = None
+        t_val_tensor = None
+        if do_validation:
+            x_val_tensor = torch.tensor(Xn[val_idx], dtype=torch.float32)
+            t_val_tensor = torch.tensor(tn[val_idx], dtype=torch.float32)
 
         model = SurfaceMLP(input_dim=d, hidden_sizes=hidden_sizes)
         optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
         criterion = nn.MSELoss()
 
         loss_history = []
+        val_loss_history = []
+        best_val_loss = np.inf
+        best_epoch = -1
+        best_state = None
 
         for epoch in range(n_epochs):
             optimizer.zero_grad()
-            pred = model(x_tensor)
-            loss = criterion(pred, t_tensor)
+            pred = model(x_train_tensor)
+            loss = criterion(pred, t_train_tensor)
             loss.backward()
             optimizer.step()
 
             loss_history.append(float(loss.item()))
 
+            if do_validation:
+                with torch.no_grad():
+                    pred_val = model(x_val_tensor)
+                    val_loss = criterion(pred_val, t_val_tensor)
+                    val_loss_value = float(val_loss.item())
+                val_loss_history.append(val_loss_value)
+                if val_loss_value < best_val_loss:
+                    best_val_loss = val_loss_value
+                    best_epoch = epoch
+                    best_state = copy.deepcopy(model.state_dict())
+
             if verbose and ((epoch + 1) % 500 == 0 or epoch == 0):
-                print(f"epoch {epoch + 1:5d}  loss = {loss.item():.6g}")
+                if do_validation:
+                    print(f"epoch {epoch + 1:5d}  train_loss = {loss.item():.6g}  val_loss = {val_loss_value:.6g}")
+                else:
+                    print(f"epoch {epoch + 1:5d}  loss = {loss.item():.6g}")
+
+        if do_validation and best_state is not None:
+            model.load_state_dict(best_state)
 
         with torch.no_grad():
             pred_train_n = model(x_tensor).cpu().numpy()
@@ -384,6 +434,16 @@ class HO:
         residuals = t - pred_train
         rmse = float(np.sqrt(np.mean((t - pred_train) ** 2)))
         mape = float(np.mean(np.abs(t - pred_train) / np.maximum(np.abs(t), 1.0)))
+
+        train_residuals = t[train_idx] - pred_train[train_idx]
+        train_rmse = float(np.sqrt(np.mean((t[train_idx] - pred_train[train_idx]) ** 2)))
+        train_mape = float(np.mean(np.abs(t[train_idx] - pred_train[train_idx]) / np.maximum(np.abs(t[train_idx]), 1.0)))
+
+        val_rmse = None
+        val_mape = None
+        if do_validation and val_idx.size > 0:
+            val_rmse = float(np.sqrt(np.mean((t[val_idx] - pred_train[val_idx]) ** 2)))
+            val_mape = float(np.mean(np.abs(t[val_idx] - pred_train[val_idx]) / np.maximum(np.abs(t[val_idx]), 1.0)))
 
         fit_info = {
             "model": model,
@@ -402,13 +462,23 @@ class HO:
             "residuals": residuals.astype(float),
             "rmse": rmse,
             "mape": mape,
+            "train_indices": train_idx.astype(int),
+            "val_indices": val_idx.astype(int),
+            "train_rmse": train_rmse,
+            "train_mape": train_mape,
+            "val_rmse": val_rmse,
+            "val_mape": val_mape,
+            "used_validation_model": bool(do_validation),
+            "best_val_loss": None if not do_validation else float(best_val_loss),
+            "best_epoch": None if not do_validation else int(best_epoch),
             "loss_history": np.asarray(loss_history, dtype=float),
+            "val_loss_history": np.asarray(val_loss_history, dtype=float),
         }
 
         self.settings["fit_info"] = fit_info
         self.settings.setdefault("results", {})["fit"] = fit_info
         return fit_info
-    
+
     def grid_interpolate_nn_nd(self):
         """
         Main high-level workflow driven by self.settings["interpolate"].
@@ -489,7 +559,7 @@ class HO:
         self.settings.setdefault("results", {})["interpolate"] = result
         self.settings["result"] = result
         return result
-        
+
     def evaluate_nn_surface_nd(self, points, fit_info=None):
         """
         Evaluate fitted NN surface at one point or many points.
@@ -534,6 +604,10 @@ class HO:
         n_candidates = cfg.get("n_candidates", 2048)
         n_starts = cfg.get("n_starts", 16)
         random_state = cfg.get("seed", cfg.get("random_state", 0))
+        optimizer = str(cfg.get("optimizer", "lbfgsb")).lower()
+        de_maxiter = int(cfg.get("de_maxiter", 200))
+        de_popsize = int(cfg.get("de_popsize", 15))
+        de_polish = bool(cfg.get("de_polish", False))
 
         if bounds is None:
             points = np.asarray(fit_info["X_raw"], dtype=float)
@@ -594,10 +668,38 @@ class HO:
         opt_bounds = list(zip(lo_t, hi_t))
         best_res = None
 
-        for x0 in starts_t:
-            res = minimize(objective, x0=x0, method="L-BFGS-B", bounds=opt_bounds)
-            if (best_res is None) or (res.fun < best_res.fun):
-                best_res = res
+        if optimizer in ("lbfgsb", "multi_start_lbfgsb"):
+            for x0 in starts_t:
+                res = minimize(objective, x0=x0, method="L-BFGS-B", bounds=opt_bounds)
+                if (best_res is None) or (res.fun < best_res.fun):
+                    best_res = res
+
+        elif optimizer in ("de", "differential_evolution"):
+            best_res = differential_evolution(
+                objective,
+                bounds=opt_bounds,
+                seed=random_state,
+                maxiter=de_maxiter,
+                popsize=de_popsize,
+                polish=de_polish,
+            )
+
+        elif optimizer in ("hybrid", "de_lbfgsb", "hybrid_de_lbfgsb"):
+            de_res = differential_evolution(
+                objective,
+                bounds=opt_bounds,
+                seed=random_state,
+                maxiter=de_maxiter,
+                popsize=de_popsize,
+                polish=False,
+            )
+            best_res = minimize(objective, x0=de_res.x, method="L-BFGS-B", bounds=opt_bounds)
+
+        else:
+            raise ValueError(
+                f"Unknown optimizer '{optimizer}'. "
+                "Valid options: lbfgsb, de, hybrid_de_lbfgsb"
+            )
 
         x_best_t = np.asarray(best_res.x, dtype=float)
         p_best = x_best_t.copy()
@@ -607,6 +709,7 @@ class HO:
 
         result = {
             "mode": mode,
+            "optimizer": optimizer,
             "x_opt": p_best.astype(float),
             "x_opt_transformed": x_best_t.astype(float),
             "value_opt": value_best,
@@ -625,11 +728,11 @@ class HO:
         self.settings.setdefault("results", {})["extremum"] = result
         self.settings["extremum_result"] = result
         return result
-    
+
     # ============================================================
     # generate new configs
     # ============================================================
-    
+
     def latin_hypercube_nd(self, center, half_widths, n_samples):
         """
         Latin hypercube in N dimensions.
@@ -701,11 +804,11 @@ class HO:
 
         self.settings.setdefault("results", {})["latin_hypercube"] = result
         return result
-    
+
     # ============================================================
     # 2D plotting
     # ============================================================
-    
+
     def plot_surface_2d(self):
         """
         Plot a 2D surface using two axes defined in the selected space.
@@ -748,6 +851,11 @@ class HO:
         label_contours = cfg.get("label_contours", True)
 
         show_points = cfg.get("show_points", True)
+        show_best_sample = cfg.get("show_best_sample", True)
+        best_sample_color = cfg.get("best_sample_color", "red")
+        best_sample_linewidth = cfg.get("best_sample_linewidth", 2.2)
+        best_sample_size = cfg.get("best_sample_size", 280)
+        print_plot_diagnostics = cfg.get("print_plot_diagnostics", True)
 
         log_space_grid = cfg.get("log_space_grid", (False, False))
         scale_axis = cfg.get("scale_axis", ("linear", "linear"))
@@ -887,7 +995,7 @@ class HO:
             v_grid = np.linspace(v_min, v_max, grid_size)
 
         U_plot, V_plot = np.meshgrid(u_grid, v_grid, indexing="ij")
-        
+
         if plot_space == "modelspace":
             x0_plot = np.dot(center_model, u_hat_model)
             y0_plot = np.dot(center_model, v_hat_model)
@@ -1014,6 +1122,35 @@ class HO:
                 label="samples",
             )
 
+        i_max_data = int(np.argmax(vals))
+        x_best_data_raw = Xraw[i_max_data]
+        best_data_val = float(vals[i_max_data])
+
+        if plot_space == "modelspace":
+            x_best_data_model = self._points_to_model_space(
+                fit_info,
+                x_best_data_raw.reshape(1, -1),
+            )[0]
+            delta_best = x_best_data_model - center_model if center_data else x_best_data_model
+            x_best_plot = float(np.dot(delta_best, u_hat_model))
+            y_best_plot = float(np.dot(delta_best, v_hat_model))
+        else:
+            delta_best = x_best_data_raw - center_raw if center_data else x_best_data_raw
+            x_best_plot = float(np.dot(delta_best, u_hat_raw))
+            y_best_plot = float(np.dot(delta_best, v_hat_raw))
+
+        if show_best_sample:
+            ax.scatter(
+                [x_best_plot], [y_best_plot],
+                marker="o",
+                facecolors="none",
+                edgecolors=best_sample_color,
+                linewidths=best_sample_linewidth,
+                s=best_sample_size,
+                zorder=6,
+                label=f"max sample: {best_data_val:.4g}",
+            )
+
         extremum_plot_xy = None
         if show_extremum and extremum_result is not None:
             x_opt_raw = np.asarray(extremum_result["x_opt"], dtype=float)
@@ -1050,8 +1187,32 @@ class HO:
                 label=extremum_label,
             )
 
-        if show_points or (show_extremum and extremum_result is not None):
+        if show_points or show_best_sample or (show_extremum and extremum_result is not None):
             ax.legend()
+
+        if print_plot_diagnostics:
+            idx_flat = int(np.nanargmax(surface))
+            iu, iv = np.unravel_index(idx_flat, surface.shape)
+            max_surface_val = float(surface[iu, iv])
+            u_at_max = float(U_plot[iu, iv])
+            v_at_max = float(V_plot[iu, iv])
+
+            print(
+                "[PLOT] panel diagnostics: "
+                f"panel='{xlabel} vs {ylabel}'; "
+                f"max_sample_value={best_data_val:.8g}; "
+                f"max_sample_point={np.array2string(x_best_data_raw, precision=6)}; "
+                f"max_surface_on_panel={max_surface_val:.8g} at (u,v)=({u_at_max:.6g},{v_at_max:.6g})"
+            )
+
+            if show_extremum and extremum_result is not None:
+                ext_val = float(extremum_result.get("value_opt", np.nan))
+                ext_point = np.asarray(extremum_result.get("x_opt", np.full(d, np.nan)), dtype=float)
+                print(
+                    "[PLOT] extremum diagnostics: "
+                    f"value_opt={ext_val:.8g}; "
+                    f"x_opt={np.array2string(ext_point, precision=6)}"
+                )
 
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
@@ -1104,7 +1265,7 @@ class HO:
 
         self.settings.setdefault("results", {})["plot_surface"] = result
         return result
-        
+
     def plot_latin_hypercube_nd(self, samples):
         """
         Plot a 2D view of N-dimensional samples.
@@ -1216,13 +1377,13 @@ class HO:
 
         ax.legend()
         plt.tight_layout()
-        
+
         if savefig:
             plt.savefig(savefig)
-        
+
         if showfig:
             plt.show()
-            
+
         plt.close(fig)
 
         result = {
@@ -1239,11 +1400,11 @@ class HO:
 
         self.settings.setdefault("results", {})["latin_hypercube_plot"] = result
         return result
-    
+
     # ============================================================
     # Helper: NSigma around function
     # ============================================================
-    
+
     def _select_around_function(self, points, fmean, fsigma_low, fsigma_high, fpoints=(lambda x: x[-1]), nsigma=1):
         # points[-1] is the output value, points[:-1] are the input parameters
         return (

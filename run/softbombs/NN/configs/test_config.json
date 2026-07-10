@@ -1,0 +1,38 @@
+{
+  "inherits": "softbomb_config.json",
+  "project": {
+    "name": "softbomb_transformer_test",
+    "output_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer_test",
+    "seed": 1337
+  },
+  "dataset": {
+    "output_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer_test/data",
+    "max_tracks": 256,
+    "max_events_per_class": 500,
+    "validation_fraction": 0.2,
+    "test_fraction": 0.2
+  },
+  "training": {
+    "dataset_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer_test/data",
+    "output_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer_test/training",
+    "epochs": 5,
+    "batch_size": 32,
+    "num_workers": 2,
+    "early_stopping_patience": 3,
+    "model": {
+      "d_model": 64,
+      "n_heads": 4,
+      "n_layers": 2,
+      "dim_feedforward": 128,
+      "dropout": 0.1,
+      "use_positional_encoding": false
+    }
+  },
+  "slurm": {
+    "time": "01:00:00",
+    "mem": "40G",
+    "cpus_per_task": 4,
+    "gres": "gpu:1"
+  }
+}
+

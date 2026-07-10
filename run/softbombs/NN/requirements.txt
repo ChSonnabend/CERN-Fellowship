@@ -1,0 +1,9 @@
+awkward
+matplotlib
+numpy
+pandas
+scikit-learn
+torch
+tqdm
+uproot
+

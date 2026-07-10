@@ -1,0 +1,2 @@
+"""Softbomb event transformer package."""
+

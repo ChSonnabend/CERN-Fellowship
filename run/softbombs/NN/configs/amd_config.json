@@ -1,0 +1,11 @@
+{
+  "inherits": "softbomb_config.json",
+  "slurm": {
+    "device": "AMD_MI100_GPU",
+    "time": "12:00:00",
+    "mem": "120G",
+    "cpus_per_task": 8,
+    "gres": "gpu:1"
+  }
+}
+

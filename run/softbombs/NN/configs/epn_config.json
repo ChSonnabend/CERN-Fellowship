@@ -1,0 +1,23 @@
+{
+  "inherits": "softbomb_config.json",
+  "training": {
+    "device": "cuda"
+  },
+  "slurm": {
+    "device": "EPN",
+    "epn_partition": "prod",
+    "time": "12:00:00",
+    "mem": "120G",
+    "cpus_per_task": 8,
+    "ngpus": 1,
+    "gres": "gpu:1",
+    "nodes": 1,
+    "ntasks_per_node": 1,
+    "python": "python3.9",
+    "use_srun": true,
+    "setup_commands": [
+      "module load O2PDPSuite",
+      "export PYTHONPATH=/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/src:${PYTHONPATH}"
+    ]
+  }
+}
