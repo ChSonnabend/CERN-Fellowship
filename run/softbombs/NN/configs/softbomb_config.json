@@ -184,7 +184,7 @@
     "cache_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/runtime",
     "keep_central_slurm_logs": false,
     "setup_commands": [
-      "export PYTHONPATH=/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/src:${PYTHONPATH}"
+      "export PYTHONPATH=/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/src:${PYTHONPATH:-}"
     ],
     "jobs_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/jobs"
   }
