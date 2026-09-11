@@ -1,0 +1,44 @@
+{
+  "directory_settings": {
+    "classes": [
+      "/lustre/alice/users/csonnab/cern-fellowship/classes"
+    ],
+    "rocm_container": "/lustre/alice/users/csonnab/TPC/TPC_PRODUCTION/Containers/rocm_torch_env.sif",
+    "cuda_container": "/lustre/alice/users/csonnab/TPC/TPC_PRODUCTION/Containers/cuda_torch_env.sif"
+  },
+  "exec_settings": {
+    "training_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/simnet/NN",
+    "output_folder": "/lustre/alice/users/csonnab/cern-fellowship/run/simnet/NN/output",
+    "opt_foldername": "sim_prune_bdt",
+    "enable_qa": 1
+  },
+  "suite_submission": {
+    "suite_submission": 0,
+    "configurations_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/simnet/NN/configurations/simPruneTraining"
+  },
+  "network_settings": {
+    "model_type": "BDT",
+    "configurations_file": "/lustre/alice/users/csonnab/cern-fellowship/run/simnet/NN/configurations/simPruneTraining/configs/bdt_configurations.py",
+    "training_file": "/lustre/alice/users/csonnab/cern-fellowship/run/simnet/NN/src/training/train.py",
+    "save_as_pt": true,
+    "save_as_onnx": true,
+    "save_loss_in_files": true
+  },
+  "job_settings": {
+    "optional_args": "",
+    "TRAIN": {
+      "name": "NN_SIM_PRUNE",
+      "partition": "highmem",
+      "time": 480,
+      "cpus-per-task": 8,
+      "memory": "32G",
+      "notify": "END,FAIL,INVALID_DEPEND",
+      "email": "",
+      "special-args": {
+        "optional_args": "",
+        "ngpus": 1,
+        "device": "CPU"
+      }
+    }
+  }
+}

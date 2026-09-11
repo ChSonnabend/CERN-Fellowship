@@ -146,7 +146,8 @@ def run_holdout_outputs(config, output_dir, dataset_dir, train_cfg, device, loss
     model = build_model_from_config(config, checkpoint["input_dim"], checkpoint["max_tracks"]).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
 
-    loader = make_loader(split_path, train_cfg["batch_size"], train_cfg["num_workers"], False)
+    eval_batch_size = int(train_cfg.get("eval_batch_size", train_cfg["batch_size"]))
+    loader = make_loader(split_path, eval_batch_size, train_cfg["num_workers"], False)
     metrics, y_true, logits, probs, pred = evaluate_model(
         model,
         loader,
@@ -174,7 +175,7 @@ def run_holdout_outputs(config, output_dir, dataset_dir, train_cfg, device, loss
             model_cpu = model.to("cpu")
             x = torch.from_numpy(data["x"][event_index : event_index + 1]).float()
             mask = torch.from_numpy(data["mask"][event_index : event_index + 1]).bool()
-            attn_weights, full_mask = first_layer_attention(model_cpu, x, mask)
+            attn_weights, full_mask = first_layer_attention(model_cpu, x, mask, max_tracks=max_attention_tracks)
             attention_pdf = qa_dir / f"{split}_event{event_index}_first_layer_attention.pdf"
             plot_attention(attn_weights, full_mask, event_index, attention_pdf, max_attention_tracks)
             print(f"Wrote QA plots: {confusion_pdf}, {attention_pdf}")
@@ -196,8 +197,11 @@ def main():
     ensure_dir(output_dir)
     print(f"Training output directory: {output_dir}")
 
-    train_loader = make_loader(dataset_dir / "train.npz", train_cfg["batch_size"], train_cfg["num_workers"], True)
-    val_loader = make_loader(dataset_dir / "val.npz", train_cfg["batch_size"], train_cfg["num_workers"], False)
+    batch_size = int(train_cfg["batch_size"])
+    eval_batch_size = int(train_cfg.get("eval_batch_size", batch_size))
+    accumulation_steps = max(1, int(train_cfg.get("gradient_accumulation_steps", 1)))
+    train_loader = make_loader(dataset_dir / "train.npz", batch_size, train_cfg["num_workers"], True)
+    val_loader = make_loader(dataset_dir / "val.npz", eval_batch_size, train_cfg["num_workers"], False)
 
     split_summaries = {}
     for split_name in ["train", "val", "holdout"]:
@@ -229,24 +233,35 @@ def main():
     best_epoch = -1
     history = []
     patience = int(train_cfg.get("early_stopping_patience", 12))
+    print(
+        "Batching: "
+        f"train_batch_size={batch_size}, "
+        f"eval_batch_size={eval_batch_size}, "
+        f"gradient_accumulation_steps={accumulation_steps}, "
+        f"effective_train_batch_size={batch_size * accumulation_steps}"
+    )
 
     for epoch in range(1, int(train_cfg["epochs"]) + 1):
         model.train()
         train_losses = []
-        for x, mask, y in train_loader:
+        optimizer.zero_grad(set_to_none=True)
+        for batch_index, (x, mask, y) in enumerate(train_loader, start=1):
             x = x.to(device, non_blocking=True)
             mask = mask.to(device, non_blocking=True)
             y = y.to(device, non_blocking=True)
-            optimizer.zero_grad(set_to_none=True)
             with autocast_context(device, enabled=scaler.is_enabled()):
                 logits = model(x, mask)
                 loss = loss_fn(logits, y)
-            scaler.scale(loss).backward()
-            if train_cfg.get("gradient_clip_norm"):
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), float(train_cfg["gradient_clip_norm"]))
-            scaler.step(optimizer)
-            scaler.update()
+                scaled_loss = loss / accumulation_steps
+            scaler.scale(scaled_loss).backward()
+            should_step = batch_index % accumulation_steps == 0 or batch_index == len(train_loader)
+            if should_step:
+                if train_cfg.get("gradient_clip_norm"):
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), float(train_cfg["gradient_clip_norm"]))
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad(set_to_none=True)
             train_losses.append(float(loss.detach().cpu()))
 
         val_metrics, _, _, _, _ = evaluate_model(model, val_loader, device, loss_fn, threshold=float(train_cfg.get("threshold", 0.5)))
@@ -303,17 +318,23 @@ def main():
         },
     )
 
-    if train_cfg.get("export_onnx", False):
-        metadata = export_checkpoint_to_onnx(
-            output_dir / "best_model.pt",
-            output_dir / "best_model.onnx",
-            config_override=config,
-            verify=True,
-        )
-        print(f"Exported ONNX: {metadata['onnx']}")
-
     if train_cfg.get("evaluate_after_train", True):
         run_holdout_outputs(config, output_dir, dataset_dir, train_cfg, device, loss_fn)
+
+    if train_cfg.get("export_onnx", False):
+        for checkpoint_name in ["best_model", "last_model"]:
+            try:
+                metadata = export_checkpoint_to_onnx(
+                    output_dir / f"{checkpoint_name}.pt",
+                    output_dir / f"{checkpoint_name}.onnx",
+                    config_override=config,
+                    verify=True,
+                )
+                print(f"Exported ONNX: {metadata['onnx']}")
+            except Exception as exc:
+                error_path = output_dir / f"{checkpoint_name}.onnx.error.txt"
+                error_path.write_text(str(exc) + "\n", encoding="utf-8")
+                print(f"Failed to export {checkpoint_name}.onnx; wrote {error_path}: {exc}")
 
 
 if __name__ == "__main__":

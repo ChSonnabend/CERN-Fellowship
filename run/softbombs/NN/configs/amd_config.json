@@ -1,5 +1,10 @@
 {
   "inherits": "softbomb_config.json",
+  "training": {
+    "batch_size": 1,
+    "eval_batch_size": 1,
+    "gradient_accumulation_steps": 64
+  },
   "slurm": {
     "device": "AMD_MI100_GPU",
     "time": "12:00:00",
@@ -8,4 +13,3 @@
     "gres": "gpu:1"
   }
 }
-

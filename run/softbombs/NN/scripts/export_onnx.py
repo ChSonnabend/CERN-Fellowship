@@ -16,6 +16,8 @@ def main():
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--output", default=None)
     parser.add_argument("--opset-version", type=int, default=17)
+    parser.add_argument("--dummy-tracks", type=int, default=None)
+    parser.add_argument("--checkpoint-config", action="store_true")
     parser.add_argument("--skip-verify", action="store_true")
     args = parser.parse_args()
 
@@ -26,9 +28,10 @@ def main():
     metadata = export_checkpoint_to_onnx(
         checkpoint,
         output,
-        config_override=config,
+        config_override=None if args.checkpoint_config else config,
         opset_version=args.opset_version,
         verify=not args.skip_verify,
+        dummy_tracks=args.dummy_tracks,
     )
     print(f"Wrote {metadata['onnx']}")
     print(metadata)
@@ -36,4 +39,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

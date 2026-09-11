@@ -149,6 +149,15 @@ def runtime_setup_lines(config, slurm, stage, stage_label):
                 'export SINGULARITYENV_PYTHONPYCACHEPREFIX="$PYTHONPYCACHEPREFIX"',
             ]
         )
+    if slurm.get("device") != "AMD_MI100_GPU":
+        lines.append('export PYTORCH_ALLOC_CONF="${PYTORCH_ALLOC_CONF:-expandable_segments:True}"')
+        if slurm.get("container"):
+            lines.extend(
+                [
+                    'export APPTAINERENV_PYTORCH_ALLOC_CONF="$PYTORCH_ALLOC_CONF"',
+                    'export SINGULARITYENV_PYTORCH_ALLOC_CONF="$PYTORCH_ALLOC_CONF"',
+                ]
+            )
     if stage == "train":
         lines.extend(
             [
@@ -248,6 +257,7 @@ def main():
     parser.add_argument("stage", choices=sorted(STAGE_COMMANDS))
     parser.add_argument("-c", "--config", required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("-d", "--dependency", type=str, help="SLURM job dependency (e.g. 'afterok:12345')")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -271,7 +281,10 @@ def main():
     if args.dry_run:
         print(script)
         return
-    result = subprocess.check_output(["sbatch", str(script_path)], universal_newlines=True)
+    sbatch_args = ["sbatch", str(script_path)]
+    if args.dependency:
+        sbatch_args.extend(["--dependency=afterok:" + args.dependency])
+    result = subprocess.check_output(sbatch_args, universal_newlines=True)
     print(result.strip())
 
 

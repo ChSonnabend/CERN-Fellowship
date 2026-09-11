@@ -5,7 +5,7 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
-path = "/lustre/alice/users/csonnab/PhD/jobs/clusterization/QA/output/06022026_PbPb_aMC_24arp2_559843_newTracking_clusterError/gpu_cf/reco/dump_cluster_error.csv"
+path = "/lustre/alice/users/csonnab/cern-fellowship/run/jobs/clusterization/QA/output/30032026_PbPb_aMC_24arp2_559843_gpucf/tmp/dump_cluster_error.csv"
 
 s1 = time.time()
 try:

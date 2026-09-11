@@ -82,8 +82,12 @@ def initialize_new_campaign(
     mkdir(output_root / "controller_logs")
     mkdir(output_root / "state")
 
+    campaign_cfg = load_json(campaign_config_src)
+    job_cfg_dst = output_root / "job_config_default.json"
+    shutil.copy2(campaign_cfg["base_config_template"], job_cfg_dst)
+    campaign_cfg["base_config_template"] = str(job_cfg_dst)
     campaign_config_dst = output_root / "campaign_config.json"
-    shutil.copy2(campaign_config_src, campaign_config_dst)
+    dump_json(campaign_config_dst, campaign_cfg)
 
     state = {
         "campaign_root": str(output_root),

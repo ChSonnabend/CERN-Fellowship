@@ -174,6 +174,14 @@ class NN:
         ### Setting the device on which to run and data-type ###
         self.dtype = self.settings["MACHINE_OPTIONS"]["dtype"]
         self.multigpu = self.settings["MACHINE_OPTIONS"]["multigpu"]
+        
+        if self.multigpu:
+            try:
+                self.rank, self.worldsize = self.multigpu_training_setup()
+            except Exception as e:
+                print_flush("Error in multi-GPU setup:", e)
+                print_flush("Falling back to single autodetection of single processors (CPU or GPU).")
+                self.multigpu = 0
 
         if not self.multigpu:
             if self.settings["MACHINE_OPTIONS"]["device"] is None:

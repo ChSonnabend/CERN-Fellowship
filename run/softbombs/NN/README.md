@@ -80,7 +80,7 @@ python3 scripts/build_dataset.py --config configs/softbomb_config.json
 
 Settings such as `dataset.max_tracks`, `dataset.include_event_multiplicity`, feature aliases, track sorting, and split fractions are baked into the generated `.npz` files. If you change them, rebuild the dataset before training; otherwise training will continue to read the old array shape. The training script checks `metadata.json` and stops with a clear error if the dataset no longer matches the config.
 
-For the transformer, `dataset.max_tracks` controls the token sequence length and attention memory scales roughly as `batch_size * n_heads * max_tracks^2`. Values like `16384` are not practical for the current vanilla transformer on a 32 GB MI100. The default `2048` covers more than 99.5% of the current training events while keeping memory manageable.
+For the transformer, `dataset.max_tracks` controls the input sequence length. The default model uses PyTorch scaled-dot-product attention with `training.model.attention_backend="flash"` and directly attends over the full track sequence. Flash attention avoids materializing the full `16384 x 16384` attention matrix, but the compute is still quadratic in the number of tracks. The current ROCm build reports that Flash attention is not compiled for MI100/gfx908, so `configs/amd_config.json` overrides the backend to `math`; batches are trimmed to the real event multiplicity before GPU transfer, and AMD uses `batch_size=1` with `gradient_accumulation_steps=64`. A Perceiver-style compressor remains available through `training.model.track_compressor.enabled=true` if you want to compare against a 256-latent bottleneck later.
 
 Train locally or inside an interactive GPU allocation:
 

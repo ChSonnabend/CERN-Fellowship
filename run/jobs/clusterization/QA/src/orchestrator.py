@@ -252,8 +252,9 @@ def lhs_around_center(
     low = [center[i] - half_widths[i] for i in range(d)]
     high = [center[i] + half_widths[i] for i in range(d)]
 
-    low = [max(low[i], global_bounds[i][0]) for i in range(d)]
-    high = [min(high[i], global_bounds[i][1]) for i in range(d)]
+    if global_bounds is not None:
+        low = [max(low[i], global_bounds[i][0]) for i in range(d)]
+        high = [min(high[i], global_bounds[i][1]) for i in range(d)]
 
     for i in range(d):
         if high[i] <= low[i]:
@@ -312,7 +313,6 @@ def generate_configs_for_points(
         set_scan_values_in_config(cfg, scan_params, point)
 
         gpu_cfg = deep_get(cfg, GPU_PROC_NN_PATH)
-        gpu_cfg["nnUseClusterErrorNetwork"] = mode
         gpu_cfg["nnClusterErrorModelPath"] = nn_model_path
 
         leaf = "__".join(
@@ -697,6 +697,7 @@ def main() -> None:
     ndim = len(scan_params)
 
     lhs_bounds = parse_bounds(campaign_cfg["lhs_bounds"], ndim=ndim)
+    lhs_global_bounds = parse_bounds(campaign_cfg.get("lhs_global_bounds", None), ndim=ndim)
     initial_half_widths = parse_float_list(campaign_cfg["initial_half_widths"])
     lhs_log_space = parse_boolish_list(campaign_cfg.get("lhs_log_space", [False] * ndim))
 
@@ -797,7 +798,7 @@ def main() -> None:
             center=x_opt,
             half_widths=next_half_widths,
             n_samples=lhs_samples,
-            global_bounds=lhs_bounds,
+            global_bounds=lhs_global_bounds,
             log_space=lhs_log_space,
             seed=lhs_seed + iteration,
             include_center=include_center,

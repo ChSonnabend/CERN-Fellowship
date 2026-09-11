@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-c", "--config", default="config.json", help="JSON file with settings for jobs")
 parser.add_argument("-o", "--output-dir", default=";;", help="QA directory (overwrite to the output directory in config_qa.json)")
 parser.add_argument("-d", "--dependency", type=int, default=-1, help="Depndency afterok")
-parser.add_argument("--gpucf", type=str, default=";;", help="GPU CF directory name")
+parser.add_argument("--gpucf", type=str, default="gpu_cf", help="GPU CF directory name")
 parser.add_argument("-f", "--file", type=str, default="histograms.root", help="Histograms file from GPUQA.cxx")
 args = parser.parse_args()
 
@@ -81,7 +81,7 @@ def check_path(path, overwrite=True):
     return return_value
 
 directories = list()
-for i, config_qa in enumerate(glob.glob(configurations_dir + "/*.json")):
+for i, config_qa in enumerate(glob.glob(configurations_dir + "/**/*.json", recursive=True)):
 
     cf = open(config_qa, "r")
     SUBMIT = json.load(cf)
@@ -94,40 +94,40 @@ if args.output_dir != ";;":
 else:
     output_dir = longest_common_substring(directories)
 
-if args.gpucf == ";;":
-    for i, ratio_dir in enumerate(glob.glob(output_dir + "/**/" + args.file, recursive=True)):
-        if "gpu_cf" in ratio_dir:
-            print("--> Jobs for {0}".format(ratio_dir))
-            for i, ratio_dir_2 in enumerate(glob.glob(ratio_dir.split("/gpu_cf")[0] + "/**/" + args.file, recursive=True)):
-                if "gpu_cf" not in ratio_dir_2:
+# if args.gpucf == ";;":
+for i, ratio_dir in enumerate(glob.glob(output_dir + "/**/" + args.file, recursive=True)):
+    if args.gpucf in ratio_dir:
+        print("--> Jobs for {0}".format(ratio_dir))
+        for i, ratio_dir_2 in enumerate(glob.glob(ratio_dir.split("/" + args.gpucf)[0] + "/**/" + args.file, recursive=True)):
+            if args.gpucf not in ratio_dir_2:
 
-                    ratio_sh = baseline_slurm
-                    ratio_sh += 'root -l -q \'{0}("{1}", "{2}")\'\n'.format(CONF["submission"]["ratio_script"], ratio_dir_2, ratio_dir)
-                    ratio_sh += "EOF\n"
+                ratio_sh = baseline_slurm
+                ratio_sh += 'root -l -q \'{0}("{1}", "{2}")\'\n'.format(CONF["submission"]["ratio_script"], ratio_dir_2, ratio_dir)
+                ratio_sh += "EOF\n"
 
-                    sh_script = os.path.join(ratio_dir_2.split("/" + args.file)[0], "RATIO.sh")
-                    bash_file = open(sh_script, "w")
-                    bash_file.write(ratio_sh)
-                    bash_file.close()
-                    submission_string = "sbatch --output=ratio.out --error=ratio.err --chdir={1} "
-                    if args.dependency > 0:
-                        submission_string += "--dependency=afterok:{0} ".format(args.dependency)
-                    submission_string += "{0}".format(sh_script, ratio_dir_2.split("/" + args.file)[0])
-                    os.system("sbatch --output=ratio.out --error=ratio.err --chdir={1} {0}".format(sh_script, ratio_dir_2.split("/" + args.file)[0]))
-else:
-    for i, ratio_dir in enumerate(glob.glob(output_dir + "/**/" + args.file, recursive=True)):
-        gpucf_histogram = glob.glob(os.path.join(args.gpucf, "**", args.file), recursive=True)[0]
-        if "gpu_cf" not in ratio_dir:
-            ratio_sh = baseline_slurm
-            ratio_sh += 'root -l -q \'{0}("{1}", "{2}")\'\n'.format(CONF["submission"]["ratio_script"], ratio_dir, gpucf_histogram)
-            ratio_sh += "EOF\n"
-
-            sh_script = os.path.join(ratio_dir.split("/" + args.file)[0], "RATIO.sh")
-            bash_file = open(sh_script, "w")
-            bash_file.write(ratio_sh)
-            bash_file.close()
-            submission_string = "sbatch --output=ratio.out --error=ratio.err --chdir={1} "
-            if args.dependency > 0:
-                submission_string += "--dependency=afterok:{0} ".format(args.dependency)
-            submission_string += "{0}".format(sh_script, ratio_dir.split("/" + args.file)[0])
-            os.system("sbatch --output=ratio.out --error=ratio.err --chdir={1} {0}".format(sh_script, ratio_dir.split("/" + args.file)[0]))
+                sh_script = os.path.join(ratio_dir_2.split("/" + args.file)[0], "RATIO.sh")
+                bash_file = open(sh_script, "w")
+                bash_file.write(ratio_sh)
+                bash_file.close()
+                submission_string = "sbatch --output=ratio.out --error=ratio.err --chdir={1} "
+                if args.dependency > 0:
+                    submission_string += "--dependency=afterok:{0} ".format(args.dependency)
+                submission_string += "{0}".format(sh_script, ratio_dir_2.split("/" + args.file)[0])
+                os.system("sbatch --output=ratio.out --error=ratio.err --chdir={1} {0}".format(sh_script, ratio_dir_2.split("/" + args.file)[0]))
+# else:
+#     for i, ratio_dir in enumerate(glob.glob(output_dir + "/**/" + args.file, recursive=True)):
+#         gpucf_histogram = glob.glob(os.path.join(args.gpucf, "**", args.file), recursive=True)[0]
+#         if args.gpucf not in ratio_dir:
+#             ratio_sh = baseline_slurm
+#             ratio_sh += 'root -l -q \'{0}("{1}", "{2}")\'\n'.format(CONF["submission"]["ratio_script"], ratio_dir, gpucf_histogram)
+#             ratio_sh += "EOF\n"
+# 
+#             sh_script = os.path.join(ratio_dir.split("/" + args.file)[0], "RATIO.sh")
+#             bash_file = open(sh_script, "w")
+#             bash_file.write(ratio_sh)
+#             bash_file.close()
+#             submission_string = "sbatch --output=ratio.out --error=ratio.err --chdir={1} "
+#             if args.dependency > 0:
+#                 submission_string += "--dependency=afterok:{0} ".format(args.dependency)
+#             submission_string += "{0}".format(sh_script, ratio_dir.split("/" + args.file)[0])
+#             os.system("sbatch --output=ratio.out --error=ratio.err --chdir={1} {0}".format(sh_script, ratio_dir.split("/" + args.file)[0]))

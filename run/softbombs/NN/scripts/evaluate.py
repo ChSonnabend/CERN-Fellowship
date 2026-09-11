@@ -21,16 +21,21 @@ def main():
     parser.add_argument("-c", "--config", required=True)
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--split", default="holdout", choices=["train", "val", "test", "holdout"])
+    parser.add_argument("--output-dir", default=None)
+    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--num-workers", type=int, default=None)
+    parser.add_argument("--device", default=None)
     args = parser.parse_args()
 
     config = load_config(args.config)
     train_cfg = config["training"]
     dataset_dir = Path(train_cfg["dataset_dir"])
-    output_dir = Path(train_cfg["output_dir"])
+    output_dir = Path(args.output_dir) if args.output_dir else Path(train_cfg["output_dir"])
+    output_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_path = Path(args.checkpoint) if args.checkpoint else output_dir / "best_model.pt"
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    device_name = train_cfg.get("device", "cuda")
+    device_name = args.device or train_cfg.get("device", "cuda")
     if device_name == "cuda" and not torch.cuda.is_available():
         device_name = "cpu"
     device = torch.device(device_name)
@@ -39,7 +44,9 @@ def main():
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)
 
-    loader = make_loader(dataset_dir / f"{args.split}.npz", train_cfg["batch_size"], train_cfg["num_workers"], False)
+    batch_size = int(args.batch_size or train_cfg["batch_size"])
+    num_workers = int(args.num_workers if args.num_workers is not None else train_cfg["num_workers"])
+    loader = make_loader(dataset_dir / f"{args.split}.npz", batch_size, num_workers, False)
     metrics, y_true, logits, probs, pred = evaluate_model(
         model,
         loader,

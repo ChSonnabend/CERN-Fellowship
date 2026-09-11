@@ -33,6 +33,18 @@ class EventDataset(Dataset):
         return self.x[idx], self.mask[idx], self.y[idx]
 
 
+def trim_collate(batch):
+    x, mask, y = zip(*batch)
+    x = torch.stack(x)
+    mask = torch.stack(mask).bool()
+    y = torch.stack(y)
+    max_valid_tracks = int(mask.sum(dim=1).max().item())
+    if max_valid_tracks < mask.shape[1]:
+        x = x[:, :max_valid_tracks, :]
+        mask = mask[:, :max_valid_tracks]
+    return x, mask, y
+
+
 def seed_everything(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -46,7 +58,14 @@ def seed_everything(seed):
 
 def make_loader(path, batch_size, num_workers, shuffle):
     dataset = EventDataset(path)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=True)
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=True,
+        collate_fn=trim_collate,
+    )
 
 
 def binary_metrics(y_true, logits, threshold=0.5):

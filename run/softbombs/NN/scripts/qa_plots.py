@@ -41,27 +41,27 @@ def plot_confusion_matrix(metrics, output_path):
     plt.close(fig)
 
 
-def first_layer_attention(model, x, mask):
+def first_layer_attention(model, x, mask, max_tracks=None):
     model.eval()
     with torch.no_grad():
-        tokens = model.input_projection(x)
-        cls = model.cls_token.expand(tokens.shape[0], -1, -1)
-        tokens = torch.cat([cls, tokens], dim=1)
-        cls_mask = torch.ones((mask.shape[0], 1), dtype=torch.bool, device=mask.device)
-        full_mask = torch.cat([cls_mask, mask.bool()], dim=1)
-        if model.position is not None:
-            tokens = tokens + model.position[:, : tokens.shape[1], :]
-
+        if max_tracks is not None and getattr(model, "track_compressor", None) is None:
+            keep_tracks = int(max_tracks)
+            x = x[:, :keep_tracks, :]
+            mask = mask[:, :keep_tracks]
+        tokens, full_mask = model.encoder_inputs(x, mask)
         layer = model.encoder.layers[0]
-        attn_input = layer.norm1(tokens) if layer.norm_first else tokens
-        _, weights = layer.self_attn(
-            attn_input,
-            attn_input,
-            attn_input,
-            key_padding_mask=~full_mask,
-            need_weights=True,
-            average_attn_weights=False,
-        )
+        if hasattr(layer, "attention_weights"):
+            weights = layer.attention_weights(tokens, full_mask)
+        else:
+            attn_input = layer.norm1(tokens) if layer.norm_first else tokens
+            _, weights = layer.self_attn(
+                attn_input,
+                attn_input,
+                attn_input,
+                key_padding_mask=~full_mask,
+                need_weights=True,
+                average_attn_weights=False,
+            )
     return weights.cpu().numpy(), full_mask.cpu().numpy()
 
 
@@ -69,7 +69,7 @@ def plot_attention(attn_weights, full_mask, event_index, output_path, max_tracks
     weights = attn_weights[0]
     real_token_indices = np.nonzero(full_mask[0])[0]
     kept = real_token_indices[: max_tracks + 1]
-    labels = ["CLS"] + [f"t{i}" for i in range(len(kept) - 1)]
+    labels = ["CLS"] + [f"z{i}" for i in range(len(kept) - 1)]
 
     with PdfPages(output_path) as pdf:
         avg = weights.mean(axis=0)
@@ -113,11 +113,12 @@ def main():
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--event-index", type=int, default=0)
     parser.add_argument("--max-attention-tracks", type=int, default=64)
+    parser.add_argument("--training-dir", default=None)
     parser.add_argument("--output-dir", default=None)
     args = parser.parse_args()
 
     config = load_config(args.config)
-    training_dir = Path(config["training"]["output_dir"])
+    training_dir = Path(args.training_dir) if args.training_dir else Path(config["training"]["output_dir"])
     dataset_dir = Path(config["training"]["dataset_dir"])
     output_dir = Path(args.output_dir) if args.output_dir else training_dir / "qa"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -137,7 +138,7 @@ def main():
 
     x = torch.from_numpy(data["x"][args.event_index : args.event_index + 1]).float()
     mask = torch.from_numpy(data["mask"][args.event_index : args.event_index + 1]).bool()
-    attn_weights, full_mask = first_layer_attention(model, x, mask)
+    attn_weights, full_mask = first_layer_attention(model, x, mask, max_tracks=args.max_attention_tracks)
     attention_pdf = output_dir / f"{args.split}_event{args.event_index}_first_layer_attention.pdf"
     plot_attention(attn_weights, full_mask, args.event_index, attention_pdf, args.max_attention_tracks)
 
@@ -147,4 +148,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

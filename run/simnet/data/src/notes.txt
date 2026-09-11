@@ -1,0 +1,9 @@
+apptainer shell -B /lustre -B /scratch /lustre/alice/users/csonnab/SingularityContainers/singularity_o2_al9.sif
+alienv -w /scratch/alice/csonnab/MyO2/sw enter O2PDPSuite::latest-o2
+
+
+# no downsampling
+root -l -b -q '/lustre/alice/users/csonnab/cern-fellowship/run/simnet/data/src/extract_o2_kine_training.C+("/lustre/alice/users/csonnab/PhD/jobs/simulation/sim_data/training/o2sim_09092026_anchoredMC_24arp2_559843/SC/0_100/500EV_1/tf1/sgn_Kine.root","/lustre/alice/users/csonnab/cern-fellowship/run/simnet/data/output/o2_kine_training_sgn.csv",-1,1000000,100000)'
+
+# downsampling: Extra args (...,downsample, nPhiBins, nRadiusBins, nEtaBins, radiusMax, etaMin, etaMax)
+root -l -b -q '/lustre/alice/users/csonnab/cern-fellowship/run/simnet/data/src/extract_o2_kine_training.C+("/lustre/alice/users/csonnab/PhD/jobs/simulation/sim_data/training/o2sim_09092026_anchoredMC_24arp2_559843/SC/0_100/500EV_1/tf1/sgn_Kine.root","/lustre/alice/users/csonnab/cern-fellowship/run/simnet/data/output/o2_kine_training_sgn_downsampled.csv",-1,1000000,100000,true,36,30,20,350.0,-5.0,5.0)'
