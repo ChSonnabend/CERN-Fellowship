@@ -1,8 +1,8 @@
 {
   "project": {
     "name": "softbomb_transformer",
-    "framework": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN",
-    "output_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer",
+    "framework": "/scratch/csonnabe/cern-fellowship/run/softbombs/NN",
+    "output_dir": "/scratch/csonnabe/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer",
     "seed": 1337
   },
   "input": {
@@ -14,14 +14,14 @@
         "name": "softbomb",
         "label": 1,
         "alien_path": "/alice/cern.ch/user/p/pwg_pp/selfjobs/Mesut100kIRpp13TeVFullT05-20260706-120258/2*",
-        "local_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/data/Mesut100kIRpp13TeVFullT05-20260706-120258",
+        "local_dir": "/scratch/csonnabe/cern-fellowship/run/softbombs/NN/data/Mesut100kIRpp13TeVFullT05-20260706-120258",
         "max_files": null
       },
       {
         "name": "background",
         "label": 0,
         "alien_path": "/alice/cern.ch/user/p/pwg_pp/selfjobs/Mesut100kIRpp13TeV-20260706-120347/2*",
-        "local_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/data/Mesut100kIRpp13TeV-20260706-120347",
+        "local_dir": "/scratch/csonnabe/cern-fellowship/run/softbombs/NN/data/Mesut100kIRpp13TeV-20260706-120347",
         "max_files": null
       }
     ]
@@ -39,7 +39,7 @@
     "dry_run": false
   },
   "dataset": {
-    "output_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/data_16384",
+    "output_dir": "/scratch/csonnabe/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/data",
     "tree_name": null,
     "track_tree_name": "O2track_iu",
     "track_extra_tree_name": "O2trackextra",
@@ -138,8 +138,8 @@
     "include_event_multiplicity": false
   },
   "training": {
-    "dataset_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/data_16384",
-    "output_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/training",
+    "dataset_dir": "/scratch/csonnabe/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/data",
+    "output_dir": "/scratch/csonnabe/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/training",
     "epochs": 80,
     "batch_size": 64,
     "num_workers": 4,
@@ -190,11 +190,11 @@
     "cpu_container": "/lustre/alice/users/csonnab/TPC/TPC_PRODUCTION/Containers/cuda_torch_env.sif",
     "container": "/lustre/alice/users/csonnab/TPC/TPC_PRODUCTION/Containers/cuda_torch_env.sif",
     "container_runtime": "apptainer",
-    "cache_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/runtime",
-    "keep_central_slurm_logs": false,
+    "cache_dir": "/scratch/csonnabe/cern-fellowship/run/softbombs/NN/outputs/softbomb_transformer/runtime",
+    "keep_central_slurm_logs": true,
     "setup_commands": [
-      "export PYTHONPATH=/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/src:${PYTHONPATH:-}"
+      "export PYTHONPATH=/scratch/csonnabe/cern-fellowship/run/softbombs/NN/src:${PYTHONPATH:-}"
     ],
-    "jobs_dir": "/lustre/alice/users/csonnab/cern-fellowship/run/softbombs/NN/jobs"
+    "jobs_dir": "/scratch/csonnabe/cern-fellowship/run/softbombs/NN/jobs"
   }
 }
