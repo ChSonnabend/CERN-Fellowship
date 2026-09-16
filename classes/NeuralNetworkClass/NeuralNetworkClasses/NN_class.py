@@ -506,96 +506,58 @@ class NN:
 
     def multigpu_training_setup(self):
         """
-        Setup PyTorch DistributedDataParallel using Slurm environment variables.
-        Automatically handles single-node and multi-node jobs.
-
-        Assumes:
-            - Slurm launches the job with srun
-            - self.multigpu contains the requested total number of GPUs (world size)
-            - 8 GPUs per node
+        Setup PyTorch DDP under Slurm.
+        Assumes one process per GPU, launched with srun.
         """
 
-        # ----------------------------------------------------------------------
-        # 1. Read Slurm variables
-        # ----------------------------------------------------------------------
-        slurm_procid   = int(os.environ.get("SLURM_PROCID", 0))    # global rank
-        slurm_localid  = int(os.environ.get("SLURM_LOCALID", 0))   # local rank on this node
-        slurm_ntasks   = int(os.environ.get("SLURM_NTASKS", 1))    # total tasks (world size)
-        slurm_nodeid   = int(os.environ.get("SLURM_NODEID", 0))    # node index (0 .. nnodes-1)
-        slurm_nnodes   = int(os.environ.get("SLURM_NNODES", 1))    # number of nodes
-        slurm_jobid    = int(os.environ.get("SLURM_JOBID", 0))
-        user           = os.environ.get("USER", "unknown")
+        slurm_procid  = int(os.environ.get("SLURM_PROCID", 0))     # global rank
+        slurm_localid = int(os.environ.get("SLURM_LOCALID", 0))    # local rank on node
+        slurm_ntasks  = int(os.environ.get("SLURM_NTASKS", 1))     # world size
+        slurm_jobid   = int(os.environ.get("SLURM_JOBID", 0))
 
-        visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")
-        if slurm_ntasks > len(visible_devices):
-            raise RuntimeError(
-                f"Slurm assigned {slurm_ntasks} ranks but only {len(visible_devices)} GPUs are healthy."
-            )
-        local_rank = int(os.environ.get("SLURM_LOCALID", 0))
+        rank = slurm_procid
+        local_rank = slurm_localid
+        worldsize = slurm_ntasks
 
-        # Let user-provided n_gpus override Slurm if desired
-        worldsize = min(len(visible_devices), slurm_ntasks)
+        def get_master_addr_from_slurm():
+            nodelist = os.environ.get("SLURM_NODELIST")
+            if nodelist:
+                import subprocess
+                return subprocess.check_output(
+                    ["scontrol", "show", "hostnames", nodelist],
+                    text=True
+                ).splitlines()[0]
+            return socket.gethostname()
 
-        # ----------------------------------------------------------------------
-        # 2. Set PyTorch DDP expected environment variables
-        # ----------------------------------------------------------------------
-        os.environ["RANK"]       = str(slurm_procid)
+        os.environ["MASTER_ADDR"] = os.environ.get("MASTER_ADDR", get_master_addr_from_slurm())
+        os.environ["MASTER_PORT"] = os.environ.get(
+            "MASTER_PORT",
+            str(20000 + (slurm_jobid % 20000))
+        )
+        os.environ["RANK"] = str(rank)
         os.environ["WORLD_SIZE"] = str(worldsize)
-        os.environ["LOCAL_RANK"] = str(slurm_localid)
+        os.environ["LOCAL_RANK"] = str(local_rank)
 
-        # ----------------------------------------------------------------------
-        # 3. Determine MASTER_ADDR (multi-node safe)
-        #    Only node 0 writes its hostname to a file shared across nodes.
-        # ----------------------------------------------------------------------
-        self.hostfile = os.path.join(os.environ.get("TMPDIR", "/tmp"), f"master_addr_{user}_{slurm_jobid}.txt")
+        if self.verbose:
+            print_flush(
+                f"[DDP setup] rank={rank}, local_rank={local_rank}, "
+                f"worldsize={worldsize}, master={os.environ['MASTER_ADDR']}:{os.environ['MASTER_PORT']}"
+            )
 
-        if slurm_nodeid == 0:
-            # Node 0 writes its hostname
-            with open(self.hostfile, "w") as f:
-                f.write(socket.gethostname())
+        torch.cuda.set_device(local_rank)
+        self.device = f"cuda:{local_rank}"
 
-        # Slurm ensures simultaneous startup → we simply read the file
-        time_slept = 0
-        while (not os.path.exists(self.hostfile)) and time_slept < 10:
-            time.sleep(0.01)
-            time_slept += 0.01
-        if time_slept >= 10:
-            raise TimeoutError("Timeout waiting for master address file.")
-        with open(self.hostfile, "r") as f:
-            master_addr = f.read().strip()
-
-        os.environ["MASTER_ADDR"] = master_addr
-
-        # ----------------------------------------------------------------------
-        # 4. Safe, collision-free master port
-        # ----------------------------------------------------------------------
-        master_port = 20000 + (slurm_jobid % 20000)
-        os.environ["MASTER_PORT"] = str(master_port)
-
-        # ----------------------------------------------------------------------
-        # 5. Initialize Process Group
-        # ----------------------------------------------------------------------
         dist.init_process_group(
             backend="nccl",
-            init_method="env://"
+            init_method="env://",
+            rank=rank,
+            world_size=worldsize,
         )
 
-        # ----------------------------------------------------------------------
-        # 6. Bind process to its GPU
-        # ----------------------------------------------------------------------
-        # PyTorch will reindex CUDA_VISIBLE_DEVICES → 0..N-1
-        ddp_device = local_rank
-
-        torch.cuda.set_device(ddp_device)
-        self.device = f"cuda:{ddp_device}"
-
-        # ----------------------------------------------------------------------
-        # 7. Wrap model in DDP
-        # ----------------------------------------------------------------------
         self.network = self.network.to(self.device)
 
         if self.settings["GLOBAL"]["weight_init"] is not None:
-            if dist.get_rank() == 0:
+            if rank == 0:
                 self.__weight_init__()
 
             for p in self.network.parameters():
@@ -605,23 +567,11 @@ class NN:
 
         self.network = DDP(
             self.network,
-            device_ids=[slurm_localid],
-            output_device=slurm_localid
+            device_ids=[local_rank],
+            output_device=local_rank,
         )
 
-        return slurm_localid, worldsize
-
-    def delete_masteraddr_file(self):
-        """
-        Delete the temporary master address file created during multi-node DDP setup.
-        Only node 0 should perform the deletion.
-        """
-
-        if self.rank == 0:
-            try:
-                os.remove(self.hostfile)
-            except OSError:
-                pass
+        return rank, worldsize
 
     def gpu_is_healthy(self, gpu_id):
         try:
